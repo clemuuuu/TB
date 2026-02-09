@@ -1,6 +1,6 @@
-# TB - Trading Bot Crypto (Binance)
+# TB - BENCHMARK For Trading Bot Crypto (Binance)
 
-Bot de trading crypto qui se connecte à Binance en temps réel via websocket.
+Une base de Bot de trading crypto qui se connecte à Binance en temps réel via websocket.
 Supporte plusieurs paires simultanément (BTC/USDT, ETH/BTC, DOT/USDT, etc.)
 avec une fenêtre par paire (un process Python par chart).
 
@@ -30,8 +30,8 @@ Fermeture automatique des positions ouvertes à l'arrêt (`Ctrl+C`).
 ---
 
 ## Lancement
-
-1. Activer l'environnement
+0. rename config.example.yaml to config.yaml
+1. Activer l'environnement,
 2. Se placer dans le dossier :
    ```bash
    cd ~/TB
@@ -250,7 +250,7 @@ Après chaque ordre, le terminal affiche le PNL de la paire concernée :
 ## Légende
 
 - Le chart principal affiche une légende (OHLC + noms EMA) en haut à gauche
-- Les subcharts (RSI, MACD) n'ont **PAS** de légende : bug JS dans lightweight-charts
+- Les subcharts (RSI, MACD) n'ont **PAS** de légende : bug JS dans lightweight-charts, ne pas activer
   (`legendHandler` crash sur `t.seriesData.get` undefined quand legend est activée sur un subchart)
 - `legend(visible=True)` = OK sur chart principal, `legend(visible=False)` = obligatoire sur subcharts
 
