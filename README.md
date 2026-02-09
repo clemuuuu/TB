@@ -18,7 +18,7 @@ Suivi du PNL (Profit & Loss) par paire en temps réel dans le terminal
 Fermeture automatique des positions ouvertes à l'arrêt (`Ctrl+C`).
 
 
--
+-----
 
 ## Pré-requis
 
