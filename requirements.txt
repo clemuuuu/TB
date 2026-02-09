@@ -1,0 +1,7 @@
+ccxt>=4.0
+pandas>=2.0
+lightweight-charts>=2.0
+pyyaml
+peewee
+rich
+

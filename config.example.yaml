@@ -1,0 +1,50 @@
+exchange:
+  name: binance
+  api_key: "YOUR_API_KEY"
+  secret: "YOUR_SECRET"
+  sandbox: true          # Mode test (paper trading)
+
+trading:
+  symbols:
+    # Format liste de dictionnaires pour activer/désactiver les indicateurs par paire
+    - symbol: BTC/USDT
+      ema: true
+      rsi: true
+      macd: true
+    - symbol: ETH/USDT
+      ema: true
+      rsi: true
+      macd: true
+    # Format simple (rétro-compatible, active tout par défaut) :
+    # - BNB/USDT 
+  candle_seconds: 120    # Durée d'une bougie en secondes
+  type: spot
+
+chart:
+  width: 800
+  height: 600
+
+# Configuration des indicateurs (optionnel)
+
+ema:
+  - period: 9
+    color: "#2962FF"
+    width: 1
+  - period: 21
+    color: "#FF6D00"
+    width: 1
+  # Ajoutez d'autres EMAs si besoin...
+
+rsi:
+  - period: 14
+    color: "#7E57C2"
+    width: 1
+  # Vous pouvez ajouter plusieurs RSI avec des périodes différentes
+
+macd:
+  fast_period: 12
+  slow_period: 26
+  signal_period: 9
+  color_macd: "#2962FF"
+  color_signal: "#FF6D00"
+  color_hist: "#26A69A"
