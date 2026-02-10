@@ -13,6 +13,10 @@ CLAUDE.md
 __pycache__/
 *.py[codz]
 *$py.class
+quantum_indicator.tex
+quantum_indicator.log
+
+
 
 # C extensions
 *.so

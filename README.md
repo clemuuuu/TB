@@ -9,7 +9,7 @@ Affiche un graphique candlestick live (style TradingView) avec :
 - **EMA** en overlay sur chaque chart (période, couleur, épaisseur configurables)
 - **RSI** en subchart sous le chart principal (période, couleur configurables)
 - **MACD** en subchart sous le RSI (fast/slow/signal, couleurs configurables)
-- **Quantum Indicator (BETA)** : modèle de Li Lin (2024) — fitting Hermite-Gauss sur la distribution des log-returns pour estimer le niveau d'énergie du marché. 2 modes : subchart linéaire (Omega/Sigma) + fenêtre distribution (histogramme + courbe fittée). Basé sur le paper [arXiv:2401.05823](https://arxiv.org/abs/2401.05823)
+- **Quantum Indicator (BETA)** : modèle de Li Lin (2024)  fitting Hermite-Gauss sur la distribution des log-returns pour estimer le niveau d'énergie du marché. 2 modes : subchart linéaire (Omega/Sigma) + fenêtre distribution (histogramme + courbe fittée). Basé sur le paper [arXiv:2401.05823](https://arxiv.org/abs/2401.05823)
 - **Indicateurs convergents** : 200 bougies 1m chargées au démarrage via REST Binance
   pour que EMA/RSI/MACD affichent des valeurs stables dès la première bougie live
 
@@ -150,12 +150,12 @@ quantum:
                           #   return_period=60 + candle_seconds=60 → returns sur 1 heure
   max_n: 4                # Max eigenstate (n=0..4, Ω jusqu'à 9)
   vol_window: 50          # Fenêtre pour le ratio de volume
-  omega_color: '#00BCD4'  # Cyan — ligne Omega sur le subchart
-  sigma_color: '#FF9800'  # Orange — ligne Sigma sur le subchart
+  omega_color: '#00BCD4'  # Cyan  ligne Omega sur le subchart
+  sigma_color: '#FF9800'  # Orange  ligne Sigma sur le subchart
 ```
 Supprimer la section `quantum` = pas de Quantum affiché.
 
-> **BETA** : Cet indicateur implémente le modèle de Li Lin (2024) — *"Quantum Probability
+> **BETA** : Cet indicateur implémente le modèle de Li Lin (2024)  *"Quantum Probability
 > Theoretic Asset Return Modeling: A Novel Schrödinger-Like Trading Equation and Multimodal
 > Distribution"* ([arXiv:2401.05823](https://arxiv.org/abs/2401.05823)). Il fitte la
 > distribution des log-returns sur les fonctions propres de Hermite-Gauss pour estimer
@@ -171,7 +171,7 @@ TB/
 │
 ├── config.yaml          Config exchange, paires, timeframe, chart, indicateurs
 ├── requirements.txt     Dépendances Python (pip install -r requirements.txt)
-├── main.py              Point d'entrée — lance tout en parallèle (asyncio)
+├── main.py              Point d'entrée lance tout en parallèle (asyncio)
 ├── README.md            Ce fichier
 ├── tb.db                Base SQLite (créée automatiquement au 1er lancement)
 ├── ARCHITECTURE.md      Architecture et documentation technique
@@ -311,7 +311,7 @@ Après chaque ordre, le terminal affiche le PNL de la paire concernée :
 - **Ne JAMAIS mettre de vraies clés API dans un fichier versionné (git)**
 - Le bot ferme proprement les connexions à l'arrêt (`Ctrl+C`) : websockets, fenêtres, aucun orphelin
 - Chaque chart tourne dans son propre process Python (multiprocessing) pour contourner
-  la limitation de lightweight-charts (1 seul `show_async` par process) — prévoir ~700 Mo de RAM par chart
+  la limitation de lightweight-charts (1 seul `show_async` par process)  prévoir ~700 Mo de RAM par chart
 - Communication `main` → charts via `mp.Queue` (candles, order_lines, clear_lines, pnl)
 - `mp.set_start_method("fork")` obligatoire (Python 3.14 utilise `forkserver` par défaut)
 - Les montants d'ordres respectent le filtre NOTIONAL Binance (`min_cost / prix × 5-10`)
