@@ -11,12 +11,12 @@ trading:
       ema: true
       rsi: true
       macd: true
+      quantum_line: true
+      quantum_window: true
     - symbol: ETH/USDT
       ema: true
       rsi: true
       macd: true
-    # Format simple (rétro-compatible, active tout par défaut) :
-    # - BNB/USDT 
   candle_seconds: 120    # Durée d'une bougie en secondes
   type: spot
 
@@ -24,7 +24,7 @@ chart:
   width: 800
   height: 600
 
-# Configuration des indicateurs (optionnel)
+# Configuration des indicateurs
 
 ema:
   - period: 9
@@ -48,3 +48,14 @@ macd:
   color_macd: "#2962FF"
   color_signal: "#FF6D00"
   color_hist: "#26A69A"
+
+quantum:
+  lookback: 200           # Nombre de returns pour le fitting
+  return_period: 60       # Écart entre 2 prix pour calculer un return (en BOUGIES)
+                          #   return_period=60 + candle_seconds=1  → returns sur 1 minute
+                          #   return_period=60 + candle_seconds=60 → returns sur 1 heure
+                          #   return_period=1  → return bougie à bougie (défaut classique)
+  max_n: 4                # Max eigenstate (n=0..4, Ω jusqu'à 9)
+  vol_window: 50          # Fenêtre pour le ratio de volume
+  omega_color: '#00BCD4'  # Cyan — ligne Omega sur le subchart
+  sigma_color: '#FF9800'  # Orange — ligne Sigma sur le subchart

@@ -4,4 +4,6 @@ lightweight-charts>=2.0
 pyyaml
 peewee
 rich
-
+pywebview
+scipy
+numpy

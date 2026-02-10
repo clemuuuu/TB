@@ -1,0 +1,743 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathtools}
+\usepackage{physics}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{caption}
+
+\geometry{margin=2.5cm}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue!80!black}\bfseries,
+    commentstyle=\color{green!50!black}\itshape,
+    stringstyle=\color{red!70!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    frame=single,
+    backgroundcolor=\color{gray!5},
+    breaklines=true,
+    tabsize=4,
+    showstringspaces=false
+}
+
+\title{%
+    \textbf{Quantum Indicator} \\[0.5em]
+    \large Documentation technique compl\`ete \\[0.3em]
+    \normalsize Bas\'e sur Li Lin (2024) --- arXiv:2401.05823
+}
+\author{TB --- Trading Bot Crypto}
+\date{F\'evrier 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+%=============================================================================
+\section{R\'esum\'e du mod\`ele}
+%=============================================================================
+
+Li Lin (2024)~\cite{lilin2024} d\'erive une \'equation diff\'erentielle pour la
+distribution des returns financiers, formellement identique \`a l'\'equation de
+Schr\"odinger de la m\'ecanique quantique. Les solutions sont des
+\textbf{fonctions de Hermite-Gauss} avec des niveaux d'\'energie discrets
+$\Omega = 2n+1$.
+
+L'id\'ee centrale~: quand l'activit\'e de trading (volume intrins\`eque) augmente, la
+distribution des returns subit une \textbf{transition de phase}~:
+\begin{itemize}
+    \item $\Omega = 1$ ($n=0$)~: Gaussienne $\rightarrow$ march\'e calme
+    \item $\Omega = 3$ ($n=1$)~: Bimodale $\rightarrow$ march\'e actif, 2 r\'egimes
+    \item $\Omega = 5$ ($n=2$)~: Trimodale $\rightarrow$ march\'e tr\`es actif
+    \item $\Omega \geq 7$ ($n \geq 3$)~: Multimodale $\rightarrow$ march\'e extr\^eme
+\end{itemize}
+
+Notre indicateur fitte la distribution empirique des log-returns sur ces solutions th\'eoriques via maximum de vraisemblance, pour estimer $\Omega$ en temps r\'eel.
+
+
+%=============================================================================
+\section{L'\'equation de Schr\"odinger-like}
+\label{sec:equation}
+%=============================================================================
+
+\subsection{D\'erivation du paper}
+
+Soit $r = \ln(P_t / P_{t-1})$ le log-return de l'actif. Le paper d\'efinit $\Psi(r)$ comme l'amplitude de probabilit\'e complexe des returns, dont le module carr\'e donne la densit\'e de probabilit\'e~:
+\begin{equation}
+    f(r) = \abs{\Psi(r)}^2
+\end{equation}
+
+\`A partir du principe de d\'ecomposition de l'ATI (Active Trading Intention) du march\'e et de la transform\'ee de Fourier, le paper d\'erive (\'eq.~15, p.17)~:
+
+\begin{equation}
+\boxed{
+    -\frac{h}{2}\,\frac{\mathrm{d}^2 \Psi}{\mathrm{d}r^2}
+    + \left(\frac{\alpha}{2}\,r^2 + \frac{\delta}{4}\,r^4\right)\Psi(r)
+    = \bar{E}\,\Psi(r)
+}
+\label{eq:schrodinger}
+\end{equation}
+
+\subsection{Signification des param\`etres}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cl}
+\toprule
+\textbf{Symbole} & \textbf{Signification financi\`ere} \\
+\midrule
+$r$ & Log-return de l'actif \\
+$\Psi(r)$ & Amplitude de probabilit\'e complexe (ATI du march\'e) \\
+$f(r) = \abs{\Psi}^2$ & Densit\'e de probabilit\'e des returns \\
+$h$ & Param\`etre de profondeur de march\'e (market depth) \\
+$\alpha$ & Param\`etre des sp\'eculateurs et fournisseurs de liquidit\'e \\
+$\delta$ & Terme anharmonique (asym\'etrie de la sp\'eculation) \\
+$\bar{E}$ & Volume de trading intrins\`eque total \\
+\bottomrule
+\end{tabular}
+\caption{Param\`etres de l'\'equation de Schr\"odinger-like}
+\end{table}
+
+L'interpr\'etation financi\`ere des termes (paper p.17)~:
+\begin{itemize}
+    \item $-\frac{h}{2}\frac{\mathrm{d}^2\Psi}{\mathrm{d}r^2}$~:
+        \og\'energie cin\'etique\fg{} $= \bar{Q}$ (volume de trading r\'ealis\'e)
+    \item $\left(\frac{\alpha}{2}r^2 + \frac{\delta}{4}r^4\right)\Psi$~:
+        \og\'energie potentielle\fg{} $= \bar{V}$ (volume non-r\'ealis\'e, gap offre-demande)
+    \item $\bar{E} = \bar{Q} + \bar{V}$~: \'energie totale (volume intrins\`eque)
+\end{itemize}
+
+La constante $h$ est d\'efinie par (paper \'eq.~10)~:
+\begin{equation}
+    f_r = h\,\frac{\mathrm{d}\omega}{\mathrm{d}r}, \qquad h \coloneqq \frac{g\,\bar{r}}{\bar{\omega}}
+\end{equation}
+o\`u $f_r$ est le nombre moyen de parts \'echang\'ees par d\'ecision au return $r$.
+
+
+%=============================================================================
+\section{Solutions~: fonctions propres de Hermite-Gauss}
+\label{sec:solutions}
+%=============================================================================
+
+\subsection{Changement de variable}
+
+On pose la variable sans dimension (paper Section~5.1, p.18)~:
+\begin{equation}
+    \xi = \left(\frac{\alpha}{h}\right)^{1/4} r
+\end{equation}
+et on red\'efinit $\phi(\xi) = \Psi\!\left(\left(\frac{h}{\alpha}\right)^{1/4}\xi\right)$.
+L'\'equation~\eqref{eq:schrodinger} devient (paper \'eq.~16)~:
+\begin{equation}
+    -\frac{\mathrm{d}^2\phi}{\mathrm{d}\xi^2}
+    + \left[\xi^2 + \lambda\,\xi^4\right]\phi(\xi)
+    = \Omega\,\phi(\xi)
+    \label{eq:xi}
+\end{equation}
+avec~:
+\begin{equation}
+    \lambda = \frac{\delta}{2\alpha}\sqrt{\frac{h}{\alpha}}\,,
+    \qquad
+    \Omega = 2(\alpha h)^{-1/2}\,\bar{E}
+\end{equation}
+
+\subsection{Cas harmonique $\lambda = 0$ (notre impl\'ementation)}
+
+Quand $\lambda = 0$, l'\'eq.~\eqref{eq:xi} se r\'eduit \`a l'\textbf{oscillateur harmonique quantique}~:
+\begin{equation}
+    -\frac{\mathrm{d}^2\phi}{\mathrm{d}\xi^2} + \xi^2\,\phi(\xi) = \Omega\,\phi(\xi)
+    \label{eq:harmonic}
+\end{equation}
+
+Les solutions convergentes ($\int_{-\infty}^{+\infty}\abs{\phi}^2\,\mathrm{d}\xi < \infty$) n'existent que pour les valeurs discr\`etes (paper p.18)~:
+\begin{equation}
+\boxed{
+    \Omega_n = 2n + 1, \qquad n = 0, 1, 2, 3, \ldots
+}
+\end{equation}
+
+\subsection{Fonctions propres}
+
+La solution g\'en\'erale est (paper \'eq.~18)~:
+\begin{equation}
+    \phi_n(\xi) = A_n\,e^{-\xi^2/2}\,H_n(\xi)
+    \label{eq:eigenfunction}
+\end{equation}
+o\`u $H_n$ est le polyn\^ome de Hermite d'ordre $n$.
+
+\subsubsection{Polyn\^omes de Hermite}
+
+D\'efinition par r\'ecurrence~:
+\begin{equation}
+    H_{n+1}(\xi) = 2\xi\,H_n(\xi) - 2n\,H_{n-1}(\xi)
+\end{equation}
+
+Valeurs explicites (paper p.18)~:
+\begin{align}
+    H_0(\xi) &= 1 \\
+    H_1(\xi) &= 2\xi \\
+    H_2(\xi) &= 4\xi^2 - 2 \\
+    H_3(\xi) &= 8\xi^3 - 12\xi \\
+    H_4(\xi) &= 16\xi^4 - 48\xi^2 + 12
+\end{align}
+
+Dans le code~: \texttt{scipy.special.eval\_hermite(n, xi)}.
+
+\subsubsection{Coefficient de normalisation $A_n$}
+
+La condition de normalisation $\int_{-\infty}^{+\infty}\abs{\phi_n(\xi)}^2\,\mathrm{d}\xi = 1$ impose~:
+\begin{equation}
+    A_n = \frac{1}{\sqrt{2^n\,n!\,\sqrt{\pi}}}
+    \label{eq:An}
+\end{equation}
+soit~:
+\begin{equation}
+    A_n^2 = \frac{1}{2^n\,n!\,\sqrt{\pi}}
+\end{equation}
+
+En log (pour stabilit\'e num\'erique)~:
+\begin{equation}
+\boxed{
+    \ln A_n^2 = -\tfrac{1}{2}\ln\pi - n\ln 2 - \ln(n!)
+}
+\label{eq:log_an2}
+\end{equation}
+o\`u $\ln(n!) = \texttt{lgamma}(n+1)$ en Python.
+
+\textbf{V\'erification num\'erique}~: $\int\abs{\phi_n(\xi)}^2\,\mathrm{d}\xi = 1.000000$ pour $n = 0,\ldots,4$. \checkmark
+
+\subsection{Densit\'e de probabilit\'e $f_n(r)$}
+
+La densit\'e en variable $r$ (pas $\xi$) est~:
+\begin{equation}
+    f_n(r) = \abs{\phi_n(\xi(r))}^2 \cdot \abs{\frac{\mathrm{d}\xi}{\mathrm{d}r}}
+\end{equation}
+
+Du paper \'eq.~17, pour $n=0$~: $\sigma = (h/4\alpha)^{1/4}$, ce qui donne~:
+\begin{equation}
+    \left(\frac{\alpha}{h}\right)^{1/4} = \frac{1}{\sigma\sqrt{2}}
+    \qquad\Longrightarrow\qquad
+    \xi = \frac{r}{\sigma\sqrt{2}}\,,\quad
+    \frac{\mathrm{d}\xi}{\mathrm{d}r} = \frac{1}{\sigma\sqrt{2}}
+\end{equation}
+
+En d\'eveloppant~:
+\begin{equation}
+\boxed{
+    f_n(r) = \frac{A_n^2}{\sigma\sqrt{2}}\;H_n(\xi)^2\;\exp(-\xi^2),
+    \qquad \xi = \frac{r}{\sigma\sqrt{2}}
+}
+\label{eq:pdf}
+\end{equation}
+
+\textbf{V\'erification pour $n=0$} (paper \'eq.~17)~:
+\begin{align}
+    f_0(r) &= \frac{1/\sqrt{\pi}}{\sigma\sqrt{2}}\;\exp\!\left(-\frac{r^2}{2\sigma^2}\right) \notag\\
+    &= \frac{1}{\sigma\sqrt{2\pi}}\;\exp\!\left(-\frac{r^2}{2\sigma^2}\right)
+\end{align}
+C'est bien la \textbf{Gaussienne} $\mathcal{N}(0, \sigma^2)$. \checkmark
+
+V\'erification num\'erique~: $\max\abs{f_0(r) - \text{Gaussienne}} = 4.26 \times 10^{-14}$. \checkmark
+
+\subsection{Formule en log-espace}
+
+Pour la stabilit\'e num\'erique, on calcule~:
+\begin{equation}
+\boxed{
+    \ln f_n(r) = \ln A_n^2 - \xi^2 + 2\ln\abs{H_n(\xi)} - \ln(\sigma\sqrt{2})
+}
+\label{eq:log_pdf}
+\end{equation}
+
+C'est la formule impl\'ement\'ee dans \texttt{\_log\_hermite\_gaussian\_pdf()}.
+
+\subsection{Variance de $f_n$}
+\label{sec:variance}
+
+R\'esultat standard de l'oscillateur harmonique quantique~:
+\begin{equation}
+    \ev{\xi^2}_n = \frac{2n+1}{2}
+\end{equation}
+
+Comme $r = \sigma\sqrt{2}\,\xi$~:
+\begin{align}
+    \text{Var}[r]_n &= \ev{r^2}_n = 2\sigma^2\,\ev{\xi^2}_n = 2\sigma^2\cdot\frac{2n+1}{2} \notag\\[6pt]
+    &\boxed{= \sigma^2\,(2n+1)}
+    \label{eq:variance}
+\end{align}
+
+La distribution \'etant sym\'etrique ($\ev{r} = 0$), la variance \'egale le moment d'ordre 2.
+
+\textbf{V\'erification num\'erique}~: rapport variance num\'erique / variance th\'eorique $= 1.0000$ pour $n = 0,\ldots,4$. \checkmark
+
+
+%=============================================================================
+\section{Notre adaptation~: fitting par maximum de vraisemblance}
+\label{sec:fitting}
+%=============================================================================
+
+\subsection{M\'ethode du paper vs notre m\'ethode}
+
+Le paper (Section~5.2, p.20) utilise une approche \textbf{statique}~:
+\begin{enumerate}
+    \item S\'eparer les donn\'ees par seuil de volume de trading $V^*$
+    \item Tester la multimodalit\'e avec le test HY~\cite{HY1998,HY2001} sur les jours \`a haut volume
+    \item It\'erer $V^*$ jusqu'\`a significativit\'e ($p < 0.05$)
+    \item Obtenir le seuil d'\'energie ground-state $\bar{E}_0$
+\end{enumerate}
+
+Cette m\'ethode n\'ecessite des milliers de jours de donn\'ees. Pour un indicateur \textbf{temps r\'eel} mis \`a jour \`a chaque bougie, nous utilisons le \textbf{maximum de vraisemblance} (MLE).
+
+\subsection{Algorithme de fitting}
+
+Soit $\{r_1, r_2, \ldots, r_N\}$ les $N$ log-returns de la fen\^etre glissante (lookback).
+
+\begin{enumerate}
+    \item Calculer la variance observ\'ee~:
+    \begin{equation}
+        \text{Var}_{\text{obs}} = \frac{1}{N}\sum_{i=1}^{N}(r_i - \bar{r})^2
+    \end{equation}
+
+    \item Pour chaque eigenstate candidat $n = 0, 1, \ldots, n_{\max}$~:
+    \begin{enumerate}
+        \item Calculer $\sigma_n$ tel que $f_n$ ait la variance observ\'ee.
+        De l'\'eq.~\eqref{eq:variance}~:
+        \begin{equation}
+        \boxed{
+            \sigma_n = \sqrt{\frac{\text{Var}_{\text{obs}}}{2n+1}}
+        }
+        \label{eq:sigma_n}
+        \end{equation}
+
+        \item Calculer la log-vraisemblance moyenne~:
+        \begin{equation}
+            \mathcal{L}_n = \frac{1}{N}\sum_{i=1}^{N}\ln f_n(r_i;\,\sigma_n)
+        \end{equation}
+    \end{enumerate}
+
+    \item S\'electionner l'eigenstate optimal~:
+    \begin{equation}
+        n^* = \arg\max_{n \in \{0,\ldots,n_{\max}\}} \mathcal{L}_n
+    \end{equation}
+
+    \item Outputs~:
+    \begin{equation}
+        \Omega^* = 2n^* + 1, \qquad \sigma^* = \sigma_{n^*}, \qquad \text{fit\_quality} = \mathcal{L}_{n^*}
+    \end{equation}
+\end{enumerate}
+
+\subsection{Validit\'e de l'approche}
+
+Chaque candidat $(n, \sigma_n)$ produit~:
+\begin{itemize}
+    \item Une PDF normalis\'ee~: $\int f_n(r;\sigma_n)\,\mathrm{d}r = 1$ \checkmark
+    \item La variance observ\'ee~: $\text{Var}[f_n] = \sigma_n^2(2n+1) = \text{Var}_{\text{obs}}$ \checkmark
+\end{itemize}
+
+La log-vraisemblance discrimine donc uniquement sur la \textbf{forme} de la distribution (unimodale vs bimodale vs trimodale, etc.), pas sur la largeur.
+
+\subsection{Traitement des n\oe uds}
+
+Les polyn\^omes de Hermite $H_n$ ont $n$ z\'eros (n\oe uds)~: pour $n > 0$, il existe des $\xi^*$ tels que $H_n(\xi^*) = 0$, donc $f_n(r^*) = 0$. Si un return tombe sur un n\oe ud~: $\ln f_n \to -\infty$.
+
+Traitement dans le code~:
+\begin{itemize}
+    \item $\abs{H_n(\xi)}$ clamp\'e \`a $\geq 10^{-300}$ pour \'eviter $\ln(0)$
+    \item Les valeurs $-\infty$ sont filtr\'ees (\texttt{np.isfinite})
+    \item Si $>50\%$ des returns donnent $-\infty$, l'eigenstate est rejet\'e
+    \item $\mathcal{L}_n$ calcul\'ee sur les valeurs finies uniquement
+\end{itemize}
+
+
+%=============================================================================
+\section{Simplifications par rapport au paper}
+\label{sec:simplifications}
+%=============================================================================
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{>{\raggedright}p{3.5cm} >{\raggedright}p{4.5cm} >{\raggedright\arraybackslash}p{5.5cm}}
+\toprule
+\textbf{Aspect} & \textbf{Paper} & \textbf{Notre impl\'ementation} \\
+\midrule
+Terme anharmonique & $\lambda\xi^4$ pr\'esent, $\Omega \neq 2n+1$ (\'eq.~19) & $\lambda = 0$ (harmonique pur), $\Omega = 2n+1$ \\
+Niveaux d'\'energie & Continus (d\'ependent de $\lambda$) & Discrets~: $1, 3, 5, 7, 9$ \\
+Estimation de $n$ & Seuil de volume $+$ test HY & Maximum de vraisemblance \\
+Donn\'ees & Returns journaliers, $\sim$10 ans & Returns par bougie ($N$ sec), fen\^etre $= 200$ \\
+Param\`etre $\sigma$ & Fixe (d\'epend de $\alpha, h$) & Calcul\'e par eigenstate \\
+M\'elange d'\'etats & Distribution $=$ m\'elange de $\Omega$ & Un seul eigenstate fitt\'e \\
+Phase $\theta(r)$ & Mod\'elis\'ee (ATI complexe) & Ignor\'ee (on utilise $\abs{\Psi}^2$ seul) \\
+\bottomrule
+\end{tabular}
+\caption{Simplifications par rapport au paper}
+\end{table}
+
+\paragraph{Justification de $\lambda = 0$.}
+Le param\`etre $\delta = \gamma\lambda_c - \lambda_a$ (paper \'eq.~13) mesure l'asym\'etrie entre la perception des fournisseurs de liquidit\'e ($\gamma\lambda_c$) et la couverture des sp\'eculateurs ($\lambda_a$). Dans un march\'e efficient, $\delta \approx 0 \Rightarrow \lambda \approx 0$. L'analyse empirique du paper (Section~5.2) se concentre sur la comparaison harmonique. L'anharmonicit\'e d\'ecale l\'eg\`erement $\Omega$ mais ne change pas la nature qualitative des transitions de phase.
+
+\paragraph{Justification du MLE.}
+Le paper utilise des donn\'ees statiques (10 ans, journali\`eres). Nous avons besoin d'un indicateur temps r\'eel. Le MLE est calculable sur 200 points et donne un r\'esultat imm\'ediat. Les deux approches identifient la m\^eme information~: quel eigenstate d\'ecrit le mieux la distribution courante.
+
+\paragraph{Cas anharmonique (\'eq.~19 du paper).}
+Quand $\lambda \neq 0$, les niveaux d'\'energie satisfont la cubique~:
+\begin{equation}
+    \left(\frac{\Omega_n}{2n+1}\right)^3 - \left(\frac{\Omega_n}{2n+1}\right) = \frac{4}{3}\left(1 + \frac{2n}{3}\right)\lambda
+    \label{eq:anharmonic}
+\end{equation}
+Pour $\lambda > 0$~: $\Omega_0 > 1$ et $\Omega_{n+1} - \Omega_n > 2$.
+Pour $\lambda < 0$~: $\Omega_0 < 1$ et $\Omega_{n+1} - \Omega_n < 2$.
+
+
+%=============================================================================
+\section{Documentation du code}
+\label{sec:code}
+%=============================================================================
+
+\subsection{\texttt{bot/indicators.py} --- \texttt{QuantumIndicator}}
+
+\subsubsection{\texttt{\_\_init\_\_(lookback, max\_n, vol\_window)}}
+
+\begin{lstlisting}
+def __init__(self, lookback=200, max_n=4, vol_window=50):
+\end{lstlisting}
+
+\begin{itemize}
+    \item \texttt{lookback}~$= N$~: nombre de returns dans la fen\^etre glissante
+    \item \texttt{max\_n}~$= n_{\max}$~: eigenstate maximum test\'e ($\Omega_{\max} = 2 \cdot 4 + 1 = 9$)
+    \item \texttt{vol\_window}~: fen\^etre pour le volume ratio
+\end{itemize}
+
+N\'ecessite \texttt{lookback}$+1$ prix pour calculer \texttt{lookback} returns (car \texttt{np.diff} r\'eduit la taille de 1). Le buffer stocke jusqu'\`a $2 \times$\texttt{lookback} prix.
+
+Outputs mis \`a jour \`a chaque bougie~:
+\begin{itemize}
+    \item \texttt{energy\_level}~: $n^*$ (0, 1, 2, 3, 4)
+    \item \texttt{omega}~: $\Omega^* = 2n^* + 1$
+    \item \texttt{sigma}~: $\sigma^*$ (\'eq.~\ref{eq:sigma_n})
+    \item \texttt{fit\_quality}~: $\mathcal{L}_{n^*}$
+    \item \texttt{vol\_ratio}~: volume courant / moyenne
+\end{itemize}
+
+\subsubsection{\texttt{update(close, volume)}}
+
+Appel\'ee \`a chaque cl\^oture de bougie.
+
+\begin{lstlisting}
+def update(self, close, volume=0.0):
+    self.prices.append(close)
+    self.volumes.append(volume)
+    # Buffer glissant
+    if len(self.prices) > self.lookback * 2:
+        self.prices.pop(0)
+        self.volumes.pop(0)
+    if len(self.prices) > self.lookback:
+        prices_arr = np.array(self.prices)
+        log_returns = np.diff(np.log(prices_arr))     # r_i = ln(P_i/P_{i-1})
+        if len(log_returns) >= self.lookback:
+            returns = log_returns[-self.lookback:]
+            self._fit_eigenstate(returns)
+            self.initialized = True
+\end{lstlisting}
+
+Le volume est stock\'e mais \textbf{n'intervient pas} dans le fitting. Il sert uniquement au calcul du \texttt{vol\_ratio}.
+
+\subsubsection{\texttt{\_log\_hermite\_gaussian\_pdf(r, n, sigma)}}
+
+Impl\'emente l'\'eq.~\eqref{eq:log_pdf}~:
+
+\begin{lstlisting}
+def _log_hermite_gaussian_pdf(self, r, n, sigma):
+    sigma_sqrt2 = sigma * sqrt(2)
+    xi = r / sigma_sqrt2                              # xi = r / (sigma * sqrt(2))
+    log_an2 = -0.5*log(pi) - n*log(2) - lgamma(n+1)  # eq (7) : ln(A_n^2)
+    hn = eval_hermite(n, xi)                           # H_n(xi)
+    abs_hn = np.maximum(np.abs(hn), 1e-300)            # clamp pour eviter log(0)
+    log_f = log_an2 - xi**2 + 2*np.log(abs_hn) - log(sigma_sqrt2)
+    return log_f
+\end{lstlisting}
+
+Correspondance terme \`a terme avec l'\'eq.~\eqref{eq:log_pdf}~:
+\begin{align*}
+    \texttt{log\_an2} &\longleftrightarrow \ln A_n^2 &\text{(\'eq.~\ref{eq:log_an2})} \\
+    \texttt{-xi**2} &\longleftrightarrow -\xi^2 \\
+    \texttt{2*np.log(abs\_hn)} &\longleftrightarrow 2\ln\abs{H_n(\xi)} \\
+    \texttt{-log(sigma\_sqrt2)} &\longleftrightarrow -\ln(\sigma\sqrt{2})
+\end{align*}
+
+\subsubsection{\texttt{\_fit\_eigenstate(returns)}}
+
+Impl\'emente l'algorithme de la Section~\ref{sec:fitting}.
+
+\begin{lstlisting}
+def _fit_eigenstate(self, returns):
+    var_obs = float(np.var(returns))                   # Var_obs
+    # ...
+    for n in range(self.max_n + 1):
+        omega_n = 2 * n + 1                            # Omega_n = 2n+1
+        sigma_n = sqrt(var_obs / omega_n)              # eq (10) : sigma_n
+        log_pdf = self._log_hermite_gaussian_pdf(returns, n, sigma_n)
+        valid = np.isfinite(log_pdf)                   # filtre noeuds
+        if valid.sum() < len(returns) * 0.5:
+            continue
+        ll = float(np.mean(log_pdf[valid]))            # L_n = mean(ln f_n)
+        if ll > best_ll:
+            best_ll = ll
+            best_n = n
+            best_sigma = sigma_n
+\end{lstlisting}
+
+\subsubsection{\texttt{\_build\_display(returns)}}
+
+G\'en\`ere les donn\'ees pour la fen\^etre distribution~:
+\begin{itemize}
+    \item Histogramme~: \texttt{np.histogram(returns, bins, density=True)} --- normalis\'e $\int = 1$
+    \item Grille~: 200 points entre $\min(r) - 20\%$ marge et $\max(r) + 20\%$
+    \item PDF fitt\'ee~: $f_{n^*}(r;\sigma^*)$ \'evalu\'ee sur la grille, via $\exp(\text{clip}(\ln f, -50, 50))$
+\end{itemize}
+
+\subsubsection{\texttt{compute\_next(current\_price)}}
+
+Retourne $(\Omega^*, \sigma^*, \mathcal{L}_{n^*})$ sans modifier l'\'etat. Les valeurs ne changent qu'au \texttt{update()} (candle close). Le fitting est un calcul par distribution, pas par prix individuel.
+
+\subsubsection{\texttt{current\_return(current\_price)}}
+
+\begin{equation}
+    r_{\text{current}} = \ln\!\left(\frac{P_{\text{live}}}{P_{\text{last\_close}}}\right)
+\end{equation}
+
+Utilis\'e pour positionner le marqueur rouge sur la fen\^etre distribution.
+
+
+\subsection{\texttt{ui/chart.py} --- Subchart quantum}
+
+\subsubsection{Lignes affich\'ees}
+
+\begin{itemize}
+    \item \textbf{Omega} (cyan, \'epaisseur 2)~: $\Omega = 2n+1$, valeurs discr\`etes $1, 3, 5, 7, 9$
+    \item \textbf{Sigma bps} (orange, \'epaisseur 1)~: $\sigma \times 10^4$ (en points de base)
+\end{itemize}
+
+Lignes de r\'ef\'erence horizontales~:
+\begin{itemize}
+    \item $\Omega = 1$ (vert pointill\'e)~: ground state, Gaussienne
+    \item $\Omega = 3$ (jaune pointill\'e)~: premier \'etat excit\'e, bimodale
+\end{itemize}
+
+Le scaling $\sigma \times 10^4$ est n\'ecessaire car pour BTC sur des bougies de 1--2~min, $\sigma \approx 1$--$5 \times 10^{-4}$, soit $1$--$5$ bps, comparable \`a $\Omega$ (1--9).
+
+\subsubsection{Warmup}
+
+Le param\`etre \texttt{history} contient des tuples $(\text{close}, \text{volume})$ provenant de 200 bougies 1m charg\'ees via ccxt REST.
+
+\begin{lstlisting}
+for item in history:
+    close, volume = item[0], item[1]
+    for calc in ema_calculators.values():
+        calc.update(close)                 # EMA: close seul
+    # ... RSI, MACD: close seul
+    if quantum_calculator:
+        quantum_calculator.update(close, volume)  # Quantum: close + volume
+\end{lstlisting}
+
+\subsubsection{Candle close}
+
+\begin{lstlisting}
+quantum_calculator.update(last_processed_close, last_processed_volume)
+# Envoyer la distribution au compass
+if compass_proxy and quantum_calculator.initialized:
+    q = quantum_calculator
+    compass_proxy.update_distribution(
+        q.energy_level, q.omega, q.sigma, q.fit_quality,
+        q.r_grid, q.fitted_pdf,
+        q.empirical_hist[0], q.empirical_hist[1])
+\end{lstlisting}
+
+\subsubsection{Tick update}
+
+\begin{lstlisting}
+res = quantum_calculator.compute_next(close_price)  # (omega, sigma, fit_quality)
+o_val, s_val, fq_val = res
+s_bps = s_val * 10000                               # sigma en basis points
+# Update subchart lines: Omega et Sigma bps
+# Update compass: current_return(close_price) -> marqueur rouge
+\end{lstlisting}
+
+
+\subsection{\texttt{ui/compass.py} --- Fen\^etre distribution}
+
+\subsubsection{Architecture}
+
+Process s\'epar\'e (\texttt{mp.Process}) lanc\'e depuis \texttt{\_chart\_worker}. Communication via \texttt{mp.Queue}~:
+\begin{itemize}
+    \item \texttt{("tick", $r_{\text{current}}$)}~: chaque tick, d\'eplace le marqueur rouge
+    \item \texttt{("dist", $n, \Omega, \sigma, \mathcal{L}, r_{\text{grid}}, f_{\text{pdf}}, h_{\text{counts}}, h_{\text{edges}}$)}~: chaque bougie, redessine tout
+\end{itemize}
+
+\subsubsection{Visualisation (canvas HTML/JavaScript)}
+
+\begin{itemize}
+    \item \textbf{Barres grises}~: histogramme empirique (density=True, $\int = 1$)
+    \item \textbf{Courbe color\'ee}~: $f_{n^*}(r;\sigma^*)$ --- couleur selon $n$~:
+        $n=0$ vert, $n=1$ bleu, $n=2$ jaune, $n=3$ rouge, $n=4$ magenta
+    \item \textbf{Ligne rouge pointill\'ee}~: $r_{\text{current}}$ (marqueur live)
+    \item \textbf{Overlay}~: \texttt{n=\_, $\Omega$=\_, $\sigma$=\_, fit=\_ [\'etat]}
+\end{itemize}
+
+
+\subsection{\texttt{main.py} --- Warmup historique}
+
+\begin{lstlisting}
+import ccxt as _ccxt
+_hist = _ccxt.binance()                            # REST sync, donnees publiques
+ohlcv = _hist.fetch_ohlcv(sym, '1m', limit=200)   # 200 bougies 1-minute
+historical_data[sym] = [(c[4], c[5]) for c in ohlcv]  # (close, volume)
+\end{lstlisting}
+
+Condition de fetch~:
+\begin{lstlisting}
+if ema_config or rsi_config or macd_config or quantum_config:
+\end{lstlisting}
+
+Le \texttt{quantum\_config} a \'et\'e ajout\'e \`a cette condition pour d\'eclencher le fetch quand seul le quantum est activ\'e.
+
+
+%=============================================================================
+\section{V\'erifications num\'eriques}
+\label{sec:verif}
+%=============================================================================
+
+Toutes les v\'erifications ont \'et\'e faites avec \texttt{scipy.integrate.trapezoid} sur des grilles de $10\,000$--$50\,000$ points.
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Test} & \textbf{R\'esultat} & \textbf{Attendu} \\
+\midrule
+$\int\abs{\phi_n(\xi)}^2\,\mathrm{d}\xi$ \quad ($n=0\ldots4$) & $1.000000$ & $1$ \\
+$\int f_n(r)\,\mathrm{d}r$ \quad ($n=0\ldots4$) & $1.000000$ & $1$ \\
+$\text{Var}_{\text{num}} / \text{Var}_{\text{th\'eo}}$ \quad ($n=0\ldots4$) & $1.0000$ & $1$ \\
+$\sigma_n \to \text{Var}_{\text{check}}$ \quad ($n=0\ldots4$) & ratio $1.0000$ & $1$ \\
+$f_0$ vs Gaussienne & err $4.3\times10^{-14}$ & $0$ \\
+Fitting Gaussien $\to n=?$ & $n=0$ & $n=0$ \\
+Fitting Bimodal $\to n=?$ & $n=1$ & $n=1$ \\
+$\int\text{PDF fitt\'ee}$ (Gaussien) & $1.0000$ & $1$ \\
+$\int\text{PDF fitt\'ee}$ (Bimodal) & $0.9999$ & $1$ \\
+\bottomrule
+\end{tabular}
+\caption{R\'esultats des v\'erifications num\'eriques}
+\end{table}
+
+
+%=============================================================================
+\section{Interpr\'etation pour le trading}
+\label{sec:interpretation}
+%=============================================================================
+
+\subsection{Omega ($\Omega$) --- \'etat du march\'e}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{cclp{7cm}}
+\toprule
+$n$ & $\Omega$ & \textbf{Distribution} & \textbf{Interpr\'etation} \\
+\midrule
+0 & 1 & Gaussienne (unimodale) & March\'e calme. Variations sym\'etriques autour de 0. \\
+1 & 3 & Bimodale & March\'e actif. H\'esitation entre deux niveaux de prix. Signal de volatilit\'e accrue, potentiel breakout. \\
+2 & 5 & Trimodale & March\'e tr\`es actif. Volatilit\'e extr\^eme. \\
+$\geq 3$ & $\geq 7$ & Multimodale (4+ pics) & \'Ev\'enement de march\'e majeur. Rare. \\
+\bottomrule
+\end{tabular}
+\caption{Interpr\'etation des niveaux d'\'energie}
+\end{table}
+
+\subsection{Sigma ($\sigma$) --- volatilit\'e fondamentale}
+
+$\sigma$ est l'\'echelle de volatilit\'e en log-return. Affich\'e en \textbf{basis points} ($\sigma \times 10^4$) sur le subchart.
+
+$\sigma$ varie ind\'ependamment de $\Omega$~:
+\begin{itemize}
+    \item $\Omega=1$ + $\sigma$ petit~: march\'e tr\`es calme (range serr\'e, Gaussien)
+    \item $\Omega=1$ + $\sigma$ grand~: march\'e volatile mais unimodal
+    \item $\Omega=3$ + $\sigma$ petit~: oscillation entre deux niveaux proches
+    \item $\Omega=3$ + $\sigma$ grand~: forte oscillation entre deux niveaux \'eloign\'es
+\end{itemize}
+
+\subsection{Fit Quality ($\mathcal{L}$) --- confiance}
+
+$\mathcal{L} = $ log-vraisemblance moyenne du meilleur fit. Si $\mathcal{L}$ est faible, aucun eigenstate pur ne d\'ecrit bien la distribution $\to$ le march\'e est probablement un \textbf{m\'elange d'\'etats} (paper Section~5.2, p.19).
+
+\subsection{Fen\^etre distribution --- lecture visuelle}
+
+\begin{itemize}
+    \item Courbe matche l'histogramme $\to$ le mod\`ele d\'ecrit bien l'\'etat actuel
+    \item Histogramme plus pointu que la courbe $\to$ exc\`es de kurtosis (leptokurtique). Le paper explique cela comme un m\'elange d'\'etats~: $\Omega=1$ contribue au pic central, $\Omega \geq 3$ contribuent aux queues \'epaisses
+    \item Marqueur rouge au centre $\to$ return \og normal\fg{}
+    \item Marqueur rouge loin du centre $\to$ return extr\^eme
+\end{itemize}
+
+
+%=============================================================================
+\section{Limitations connues}
+\label{sec:limitations}
+%=============================================================================
+
+\begin{enumerate}
+    \item \textbf{M\'elange d'\'etats.} On fitte un seul eigenstate. En r\'ealit\'e, la distribution est souvent un m\'elange de plusieurs $\Omega$. Un mixture model (EM) am\'eliorerait le fit.
+
+    \item \textbf{Leptokurtosis.} Les returns financiers ont un pic plus pointu et des queues plus \'epaisses que toute $f_n$ individuelle. Cons\'equence directe de (1).
+
+    \item \textbf{Timeframe mixing.} Le warmup utilise des bougies 1m; le live utilise des bougies \`a $N$ secondes. Les returns ne sont pas sur le m\^eme timeframe pendant les $\sim$200 premi\`eres bougies live.
+
+    \item \textbf{Harmonique pur ($\lambda=0$).} Impose $\Omega \in \{1,3,5,7,9\}$. Avec $\lambda \neq 0$, les $\Omega$ seraient l\'eg\`erement d\'ecal\'es (\'eq.~\ref{eq:anharmonic}).
+
+    \item \textbf{Donn\'ees limit\'ees.} 200 bougies est un compromis entre r\'eactivit\'e et stabilit\'e statistique. Sur des bougies tr\`es courtes (5s), 200 bougies $\approx$ 17 minutes.
+
+    \item \textbf{Phase ignor\'ee.} Le paper mod\'elise $\Psi(r) = \phi(r)\,e^{i\theta(r)}$ avec une phase $\theta(r)$ repr\'esentant l'ATI. Nous utilisons $f(r) = \abs{\Psi}^2$ seul. La phase n\'ecessiterait des donn\'ees de carnet d'ordres.
+\end{enumerate}
+
+
+%=============================================================================
+\begin{thebibliography}{9}
+
+\bibitem{lilin2024}
+Li Lin,
+\textit{Quantum Probability Theoretic Asset Return Modeling: A Novel Schr\"odinger-Like Trading Equation and Multimodal Distribution},
+arXiv:2401.05823 [q-fin.MF], January 2024.
+Department of Finance, East China University of Science and Technology;
+Risk-Center, ETH Z\"urich.
+
+\bibitem{HY1998}
+M.-Y. Cheng and P. Hall,
+\textit{Calibrating the excess mass and dip tests of modality},
+Journal of the Royal Statistical Society: Series B, 60(3):579--589, 1998.
+
+\bibitem{HY2001}
+P. Hall and M. York,
+\textit{On the calibration of Silverman's test for multimodality},
+Statistica Sinica, pp.515--536, 2001.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,4 +1,178 @@
 
+import numpy as np
+from scipy.special import eval_hermite
+from math import lgamma, log, pi, sqrt, exp
+
+
+class QuantumIndicator:
+    """
+    Modèle quantique de Li Lin (2024) — arXiv:2401.05823.
+
+    Fitte la distribution des log-returns sur les fonctions propres de
+    Hermite-Gauss (solutions de l'équation de Schrödinger-like) pour
+    estimer le niveau d'énergie du marché.
+
+    Ω=1 (n=0): Gaussienne → marché calme
+    Ω=3 (n=1): Bimodale → marché actif, 2 régimes
+    Ω=5+ (n=2+): Multimodale → marché très actif
+    """
+    def __init__(self, lookback: int = 200, max_n: int = 4, vol_window: int = 50,
+                 return_period: int = 1):
+        self.lookback = lookback
+        self.max_n = max_n
+        self.vol_window = vol_window
+        self.return_period = max(1, return_period)  # en nombre de bougies
+
+        self.prices: list[float] = []
+        self.volumes: list[float] = []
+        self.initialized = False
+
+        # Outputs principaux
+        self.energy_level = 0       # n (best-fit eigenstate)
+        self.omega = 1.0            # Ω = 2n+1
+        self.sigma = 0.0            # Paramètre d'échelle de volatilité
+        self.fit_quality = 0.0      # Log-likelihood normalisée
+        self.vol_ratio = 0.0        # volume courant / moyenne
+
+        # Pour compass : distribution fittée
+        self.r_grid: np.ndarray | None = None
+        self.fitted_pdf: np.ndarray | None = None
+        self.empirical_hist: tuple | None = None  # (counts, bin_edges)
+
+    def update(self, close: float, volume: float = 0.0):
+        """Met à jour l'indicateur avec une bougie clôturée."""
+        self.prices.append(close)
+        self.volumes.append(volume)
+
+        # Buffer glissant — on garde assez de prix pour lookback returns
+        # Avec return_period=p, les returns sont chevauchants (overlapping) :
+        # r_i = log(prix[p+i] / prix[i]), donc lookback+p prix suffisent
+        max_prices = self.lookback + self.return_period + 100
+        if len(self.prices) > max_prices:
+            excess = len(self.prices) - max_prices
+            self.prices = self.prices[excess:]
+            self.volumes = self.volumes[excess:]
+
+        # Log-returns espacés de return_period bougies :
+        # r_t = log(prix_t / prix_{t - return_period})
+        p = self.return_period
+        if len(self.prices) >= p + self.lookback:
+            prices_arr = np.array(self.prices)
+            log_returns = np.log(prices_arr[p:]) - np.log(prices_arr[:-p])
+            if len(log_returns) >= self.lookback:
+                returns = log_returns[-self.lookback:]
+                self._fit_eigenstate(returns)
+                self.initialized = True
+
+        # Volume ratio
+        if len(self.volumes) >= self.vol_window + 1:
+            avg_vol = float(np.mean(self.volumes[-(self.vol_window + 1):-1]))
+            if avg_vol > 0:
+                self.vol_ratio = self.volumes[-1] / avg_vol
+
+    def _log_hermite_gaussian_pdf(self, r: np.ndarray, n: int, sigma: float) -> np.ndarray:
+        """Log-densité f_n(r) = |Ψ_n(ξ)|² · |dξ/dr|, ξ = r/(σ√2).
+
+        En log pour stabilité numérique :
+        log f_n = log(A_n²) - ξ² + 2·log|H_n(ξ)| - log(σ√2)
+        avec A_n = 1 / sqrt(√π · 2^n · n!)
+        """
+        sqrt2 = sqrt(2.0)
+        sigma_sqrt2 = sigma * sqrt2
+        xi = r / sigma_sqrt2
+
+        # log(A_n²) = -log(√π) - n·log(2) - log(n!)
+        log_an2 = -0.5 * log(pi) - n * log(2.0) - lgamma(n + 1)
+
+        # H_n(ξ) via scipy
+        hn = eval_hermite(n, xi)
+
+        # Éviter log(0) : clamp les valeurs très petites
+        abs_hn = np.abs(hn)
+        abs_hn = np.maximum(abs_hn, 1e-300)
+
+        log_f = log_an2 - xi**2 + 2.0 * np.log(abs_hn) - log(sigma_sqrt2)
+        return log_f
+
+    def _fit_eigenstate(self, returns: np.ndarray):
+        """Teste chaque eigenstate n=0..max_n, sélectionne celui qui maximise
+        la log-vraisemblance des returns observés."""
+        var_obs = float(np.var(returns))
+        if var_obs < 1e-30:
+            # Returns quasi-constants → état fondamental
+            self.energy_level = 0
+            self.omega = 1.0
+            self.sigma = 1e-10
+            self.fit_quality = 0.0
+            self._build_display(returns)
+            return
+
+        best_n = 0
+        best_ll = -np.inf
+        best_sigma = sqrt(var_obs)
+
+        for n in range(self.max_n + 1):
+            omega_n = 2 * n + 1
+            # Relation analytique du paper : Var[r]_n = σ² · (2n+1)
+            sigma_n = sqrt(var_obs / omega_n)
+
+            if sigma_n < 1e-15:
+                continue
+
+            log_pdf = self._log_hermite_gaussian_pdf(returns, n, sigma_n)
+
+            # Filtrer les -inf (returns où H_n ≈ 0, ie nœuds)
+            valid = np.isfinite(log_pdf)
+            if valid.sum() < len(returns) * 0.5:
+                continue  # Trop de nœuds → mauvais fit
+
+            ll = float(np.mean(log_pdf[valid]))
+
+            if ll > best_ll:
+                best_ll = ll
+                best_n = n
+                best_sigma = sigma_n
+
+        self.energy_level = best_n
+        self.omega = 2.0 * best_n + 1.0
+        self.sigma = best_sigma
+        self.fit_quality = best_ll
+
+        self._build_display(returns)
+
+    def _build_display(self, returns: np.ndarray):
+        """Construit la grille + PDF fittée + histogramme empirique pour le compass."""
+        # Histogramme empirique
+        n_bins = min(50, max(10, len(returns) // 5))
+        counts, bin_edges = np.histogram(returns, bins=n_bins, density=True)
+        self.empirical_hist = (counts, bin_edges)
+
+        # Grille pour la courbe fittée
+        r_min = float(returns.min())
+        r_max = float(returns.max())
+        margin = (r_max - r_min) * 0.2
+        if margin < 1e-10:
+            margin = 1e-6
+        self.r_grid = np.linspace(r_min - margin, r_max + margin, 200)
+
+        if self.sigma > 1e-15:
+            log_pdf = self._log_hermite_gaussian_pdf(self.r_grid, self.energy_level, self.sigma)
+            self.fitted_pdf = np.exp(np.clip(log_pdf, -50, 50))
+        else:
+            self.fitted_pdf = np.zeros_like(self.r_grid)
+
+    def compute_next(self, current_price: float) -> tuple[float, float, float] | None:
+        """Prévisualisation live. Retourne (omega, sigma, fit_quality) ou None."""
+        if not self.initialized:
+            return None
+        return self.omega, self.sigma, self.fit_quality
+
+    def current_return(self, current_price: float) -> float | None:
+        """Calcule le log-return courant sur return_period bougies."""
+        if len(self.prices) < self.return_period:
+            return None
+        return log(current_price / self.prices[-self.return_period])
+
 class EMA:
     """Exponential Moving Average."""
     def __init__(self, period: int):

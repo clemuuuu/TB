@@ -16,6 +16,7 @@ Le user parle français.
 - **EMA overlay** configurable sur chaque chart (section `ema:` dans config.yaml)
 - **RSI subchart** configurable sous le chart principal (section `rsi:` dans config.yaml)
 - **MACD subchart** configurable sous le chart principal (section `macd:` dans config.yaml)
+- **Quantum Indicator** : modèle de Li Lin (2024, arXiv:2401.05823) — fitting Hermite-Gauss sur la distribution des log-returns → niveau d'énergie Ω (état du marché). 2 modes : subchart linéaire (Omega/Sigma) + fenêtre distribution (histogramme + courbe fittée)
 - **Légende** visible sur le chart principal (OHLC + noms EMA), désactivée sur les subcharts (bug JS)
 - Fermeture auto des positions ouvertes au Ctrl+C
 - Actuellement : ordres random toutes les 5s par paire pour tester — pas encore de vraie stratégie
@@ -34,9 +35,10 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
 ├── bot/exchange.py      REST ccxt.binance — ordres, solde, sandbox/réel (partagé entre paires)
 ├── bot/data.py          Websocket ccxt.pro — trades live → bougies custom N secondes (1 par paire)
 ├── bot/orders.py        OrderManager — buy/sell + DB + ligne chart + PNL par paire + get_total_pnl
-├── bot/indicators.py    Classes EMA, RSI, MACD (update + compute_next pour preview live)
+├── bot/indicators.py    Classes EMA, RSI, MACD, QuantumIndicator (update + compute_next)
 ├── bot/strategy.py      Classe abstraite Strategy (on_candle, on_tick) — À CODER
 ├── ui/chart.py          lightweight-charts — 1 process par paire (chart + subcharts) + 1 PNL
+├── ui/compass.py        Quantum Distribution — fenêtre distribution (histogramme + courbe fittée) par paire
 ├── db/models.py         Peewee SQLite — Order, Trade
 └── utils/logger.py      rich logger
 ```
@@ -69,7 +71,7 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
 ## Config (config.yaml)
 - `exchange.sandbox: true` → testnet Binance (clés API testnet déjà configurées)
 - `trading.symbols` → liste de paires avec indicateurs par paire :
-  - Format nouveau : `- symbol: BTC/USDT` + `ema: true/false` + `rsi: true/false` + `macd: true/false`
+  - Format nouveau : `- symbol: BTC/USDT` + `ema: true/false` + `rsi: true/false` + `macd: true/false` + `quantum_line: true/false` + `quantum_window: true/false`
   - Format ancien : `- BTC/USDT` (rétro-compatible, tous les indicateurs activés par défaut)
   - Ces flags contrôlent uniquement l'affichage des **charts**, pas le calcul pour la stratégie
 - `trading.candle_seconds` → durée bougie en secondes (configurable, ex: 5)
@@ -77,6 +79,7 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
 - `ema` → liste d'EMA à afficher (period, color, width). Section optionnelle
 - `rsi` → liste de RSI à afficher (period, color, width). Section optionnelle
 - `macd` → config MACD (fast_period, slow_period, signal_period, couleurs). Section optionnelle
+- `quantum` → config Quantum Indicator (lookback, return_period, max_n, vol_window, omega_color, sigma_color). Section optionnelle. `return_period` est en nombre de **bougies** (pas en secondes) — le timeframe effectif dépend de `candle_seconds`
 
 ## Indicateurs (`bot/indicators.py`)
 - Classes `EMA`, `RSI` et `MACD` séparées du chart — réutilisables dans `bot/strategy.py`
@@ -97,6 +100,19 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
   - 3 composants : ligne MACD, ligne Signal, histogramme (`create_histogram`)
   - Utilise 3 EMA internes (fast, slow, signal)
   - `update()` au changement de bougie, `compute_next()` retourne (macd, signal, histogram)
+- **Quantum Indicator** : modèle de Li Lin (2024) — "Quantum Probability Theoretic Asset Return Modeling" (arXiv:2401.05823)
+  - Fitte la distribution des log-returns sur les fonctions propres de Hermite-Gauss (solutions de l'équation de Schrödinger-like)
+  - Relation clé : `Var[r] = σ² · (2n+1)` → `σ_n = sqrt(Var_obs / Ω)` pour chaque eigenstate n
+  - Sélection du meilleur n (0..max_n) par maximum de log-vraisemblance
+  - Ω=1 (n=0) : Gaussienne → marché calme ; Ω=3 (n=1) : bimodale → 2 régimes ; Ω=5+ : multimodale → volatile
+  - `return_period` : écart en **nombre de bougies** pour calculer un return (`log(prix_t / prix_{t-period})`). Permet de découpler le timeframe de l'indicateur de celui des bougies. Ex: `return_period=60` + `candle_seconds=1` → returns sur 1 minute ; `return_period=60` + `candle_seconds=60` → returns sur 1 heure
+  - Outputs : `energy_level` (n), `omega` (Ω=2n+1), `sigma` (échelle), `fit_quality` (log-vraisemblance), `vol_ratio`
+  - `update(close, volume)` au changement de bougie, `compute_next(price)` retourne `(omega, sigma, fit_quality)`
+  - `current_return(price)` retourne le log-return courant sur `return_period` bougies pour le marqueur du compass
+  - Sigma affiché en **basis points** (×10000) sur le subchart pour être visible à côté d'Omega
+  - 2 modes d'affichage par paire (flags `quantum_line` et `quantum_window` dans config.yaml) :
+    - **Subchart linéaire** : lignes Omega (cyan) + Sigma bps (orange) avec références à Ω=1 et Ω=3
+    - **Fenêtre Distribution** : histogramme empirique + courbe PDF fittée + marqueur return courant (`ui/compass.py`)
 
 ## Pour modifier
 - Ajouter une stratégie → créer une classe dans `bot/strategy.py` héritant de `Strategy`
@@ -104,4 +120,5 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
 - Ajouter/modifier EMA → `config.yaml` > `ema` (ajouter/retirer des entrées period/color/width)
 - Ajouter/modifier RSI → `config.yaml` > `rsi` (ajouter/retirer des entrées period/color/width)
 - Ajouter/modifier MACD → `config.yaml` > `macd` (fast_period, slow_period, signal_period, couleurs)
+- Ajouter/modifier Quantum → `config.yaml` > `quantum` (lookback, return_period, max_n, vol_window, omega_color, sigma_color) + flags par paire (`quantum_line`, `quantum_window`)
 - Changer le style du chart → `ui/chart.py`

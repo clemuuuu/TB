@@ -9,6 +9,7 @@ Affiche un graphique candlestick live (style TradingView) avec :
 - **EMA** en overlay sur chaque chart (période, couleur, épaisseur configurables)
 - **RSI** en subchart sous le chart principal (période, couleur configurables)
 - **MACD** en subchart sous le RSI (fast/slow/signal, couleurs configurables)
+- **Quantum Indicator (BETA)** : modèle de Li Lin (2024) — fitting Hermite-Gauss sur la distribution des log-returns pour estimer le niveau d'énergie du marché. 2 modes : subchart linéaire (Omega/Sigma) + fenêtre distribution (histogramme + courbe fittée). Basé sur le paper [arXiv:2401.05823](https://arxiv.org/abs/2401.05823)
 - **Indicateurs convergents** : 200 bougies 1m chargées au démarrage via REST Binance
   pour que EMA/RSI/MACD affichent des valeurs stables dès la première bougie live
 
@@ -57,8 +58,8 @@ python main.py                 # avec graphiques
 python main.py --no-chart      # terminal seul, sans fenêtres
 ```
 
-- Une fenêtre s'ouvre par paire (chart + RSI + MACD) + 1 fenêtre PNL
-  (2 paires = 2 fenêtres chart + 1 fenêtre PNL = 3 fenêtres).
+- Une fenêtre s'ouvre par paire (chart + subcharts) + 1 fenêtre PNL
+  \+ optionnellement 1 fenêtre distribution quantum par paire.
   Avec `--no-chart`, seul le terminal affiche les ordres et le PNL.
 - Les bougies se construisent toutes les X secondes (réglable dans `config.yaml` > `candle_seconds`).
 - Toutes les Y secondes, un ordre random (buy/sell) est passé par paire (réglable dans `main.py` > `random_orders`).
@@ -90,12 +91,14 @@ python main.py --no-chart      # terminal seul, sans fenêtres
 ```yaml
 symbols:
   - symbol: BTC/USDT
-    ema: true       # afficher EMA overlay
-    rsi: true       # afficher subchart RSI
-    macd: true      # afficher subchart MACD
+    ema: true            # afficher EMA overlay
+    rsi: true            # afficher subchart RSI
+    macd: true           # afficher subchart MACD
+    quantum_line: true   # afficher subchart Omega/Sigma (BETA)
+    quantum_window: true # afficher fenêtre distribution (BETA)
 ```
-Ancien format aussi supporté : `- BTC/USDT` (tout activé par défaut).
-`ema`/`rsi`/`macd` contrôlent l'affichage des charts, pas le calcul.
+Ancien format aussi supporté : `- BTC/USDT` (tout activé par défaut sauf quantum).
+Les flags contrôlent l'affichage des charts, pas le calcul.
 
 ### Chart
 
@@ -137,6 +140,28 @@ macd:
 ```
 Supprimer la section `macd` = pas de MACD affiché.
 
+### Quantum Indicator (optionnel, BETA)
+
+```yaml
+quantum:
+  lookback: 200           # Nombre de returns pour le fitting
+  return_period: 60       # Écart entre 2 prix pour calculer un return (en BOUGIES)
+                          #   return_period=60 + candle_seconds=1  → returns sur 1 minute
+                          #   return_period=60 + candle_seconds=60 → returns sur 1 heure
+  max_n: 4                # Max eigenstate (n=0..4, Ω jusqu'à 9)
+  vol_window: 50          # Fenêtre pour le ratio de volume
+  omega_color: '#00BCD4'  # Cyan — ligne Omega sur le subchart
+  sigma_color: '#FF9800'  # Orange — ligne Sigma sur le subchart
+```
+Supprimer la section `quantum` = pas de Quantum affiché.
+
+> **BETA** : Cet indicateur implémente le modèle de Li Lin (2024) — *"Quantum Probability
+> Theoretic Asset Return Modeling: A Novel Schrödinger-Like Trading Equation and Multimodal
+> Distribution"* ([arXiv:2401.05823](https://arxiv.org/abs/2401.05823)). Il fitte la
+> distribution des log-returns sur les fonctions propres de Hermite-Gauss pour estimer
+> le niveau d'énergie du marché (Ω). Ω=1 = Gaussienne (calme), Ω=3 = bimodale (2 régimes),
+> Ω=5+ = multimodale (volatile). L'indicateur est fonctionnel mais en phase de test.
+
 ---
 
 ## Structure du projet
@@ -149,7 +174,7 @@ TB/
 ├── main.py              Point d'entrée — lance tout en parallèle (asyncio)
 ├── README.md            Ce fichier
 ├── tb.db                Base SQLite (créée automatiquement au 1er lancement)
-├── CLAUDE.md            Instructions pour Claude Code
+├── ARCHITECTURE.md      Architecture et documentation technique
 │
 ├── bot/                 LOGIQUE TRADING
 │   ├── __init__.py
@@ -169,10 +194,11 @@ TB/
 │   │                      - PNL par paire (_PairPNL) avec unités correctes
 │   │                      - Montants calculés dynamiquement (filtre NOTIONAL)
 │   │
-│   ├── indicators.py    Classes EMA, RSI, MACD (calcul + preview live)
+│   ├── indicators.py    Classes EMA, RSI, MACD, QuantumIndicator
 │   │                      - EMA : update(close) + compute_next(price)
 │   │                      - RSI : update(close) + compute_next(price)
 │   │                      - MACD : update(close) + compute_next(price) → (macd, signal, hist)
+│   │                      - QuantumIndicator (BETA) : update(close, volume) + compute_next(price)
 │   │                      - Réutilisables dans strategy.py pour les décisions
 │   │
 │   └── strategy.py      Classe abstraite Strategy (placeholder)
@@ -181,6 +207,10 @@ TB/
 │
 ├── ui/                  INTERFACE GRAPHIQUE
 │   ├── __init__.py
+│   ├── compass.py       Fenêtre distribution quantique (BETA)
+│   │                      - Histogramme empirique + courbe PDF fittée
+│   │                      - Marqueur return courant (ligne rouge)
+│   │                      - Process séparé par paire (pywebview + canvas)
 │   └── chart.py         Graphique candlestick live (multiprocessing)
 │                          - lightweight-charts (TradingView) via pywebview
 │                          - 1 process par paire (mp.Process + mp.Queue)
@@ -188,6 +218,7 @@ TB/
 │                          - Chart principal (bougies + EMA overlay)
 │                          - Subchart RSI (create_subchart, lignes 30/70)
 │                          - Subchart MACD (histogramme + ligne MACD + Signal)
+│                          - Subchart Quantum (BETA) (Omega + Sigma bps)
 │                          - _PnlProxy / _pnl_chart_worker : fenêtre PNL dédiée
 │                          - update_candle() : met à jour la bougie en cours
 │                          - update_pnl() : envoie un point PNL au chart dédié
@@ -255,8 +286,9 @@ Après chaque ordre, le terminal affiche le PNL de la paire concernée :
 
 ## Prochaines étapes
 
-- [ ] Coder une vraie stratégie dans `bot/strategy.py` (basée sur RSI/EMA/MACD)
+- [ ] Coder une vraie stratégie dans `bot/strategy.py` (basée sur RSI/EMA/MACD/Quantum)
 - [ ] Remplacer les ordres random par la stratégie
+- [ ] Stabiliser le Quantum Indicator (sortir de la BETA)
 - [ ] Backtesting sur données historiques
 - [ ] Passer en mode réel quand c'est prêt (`sandbox: false`)
 

@@ -73,6 +73,8 @@ async def main(use_chart: bool = True):
                 "ema": entry.get("ema", True),
                 "rsi": entry.get("rsi", True),
                 "macd": entry.get("macd", True),
+                "quantum_line": entry.get("quantum_line", False),
+                "quantum_window": entry.get("quantum_window", False),
             }
     candle_sec = config["trading"]["candle_seconds"]
 
@@ -90,20 +92,21 @@ async def main(use_chart: bool = True):
         ema_config = config.get("ema", [])
         rsi_config = config.get("rsi", [])
         macd_config = config.get("macd")
+        quantum_config = config.get("quantum")
 
         # Charger l'historique pour warmup indicateurs (200 bougies 1m, données publiques)
-        historical_closes = {}
-        if ema_config or rsi_config or macd_config:
+        historical_data = {}
+        if ema_config or rsi_config or macd_config or quantum_config:
             import ccxt as _ccxt
             _hist = _ccxt.binance()
             for sym in symbols:
                 try:
                     ohlcv = _hist.fetch_ohlcv(sym, '1m', limit=200)
-                    historical_closes[sym] = [c[4] for c in ohlcv]  # index 4 = close
+                    historical_data[sym] = [(c[4], c[5]) for c in ohlcv]  # (close, volume)
                     log.info(f"[{sym}] {len(ohlcv)} bougies 1m chargées (warmup indicateurs)")
                 except Exception as e:
                     log.warning(f"[{sym}] Historique indisponible: {e}")
-                    historical_closes[sym] = []
+                    historical_data[sym] = []
 
         # Créer les charts par paire (EMA/RSI/MACD conditionnés par symbol_flags)
         for sym in symbols:
@@ -113,9 +116,16 @@ async def main(use_chart: bool = True):
             sym_rsi = rsi_config if flags["rsi"] else []
             sym_macd = macd_config if flags["macd"] else None
             
-            history = historical_closes.get(sym, [])
+            # On combine la config quantum globale avec les flags locaux
+            sym_quantum = None
+            if quantum_config and (flags["quantum_line"] or flags["quantum_window"]):
+                sym_quantum = quantum_config.copy()
+                sym_quantum["show_line"] = flags["quantum_line"]
+                sym_quantum["show_window"] = flags["quantum_window"]
+
+            history = historical_data.get(sym, [])
             charts[sym] = _ChartProxy(sym, config["chart"], candle_sec, 
-                                      sym_ema, sym_rsi, sym_macd, history)
+                                      sym_ema, sym_rsi, sym_macd, sym_quantum, history)
             
         pnl_chart = create_pnl_chart(config["chart"])
 
@@ -158,6 +168,8 @@ async def main(use_chart: bool = True):
         if flags["ema"]: indicators.append("EMA")
         if flags["rsi"]: indicators.append("RSI")
         if flags["macd"]: indicators.append("MACD")
+        if flags.get("quantum_line"): indicators.append("Quantum(Chart)")
+        if flags.get("quantum_window"): indicators.append("Quantum(2D)")
         ind_str = "+".join(indicators) if indicators else "aucun indicateur"
         log.info(f"  {sym} — {ind_str}")
     log.info(f"Bougies {candle_sec}s ({mode})")

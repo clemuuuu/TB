@@ -12,7 +12,7 @@ from utils.logger import log
 
 def _chart_worker(symbol: str, config: dict, candle_sec: int,
                    ema_config: list, rsi_config: list, macd_config: dict,
-                   data_q: mp.Queue, history: list = None):
+                   quantum_config: dict, data_q: mp.Queue, history: list = None):
     """Process séparé : un Chart unique (avec subcharts) par paire."""
     import sys, os, logging
     os.setpgrp()
@@ -24,7 +24,12 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
 
     import asyncio
     from lightweight_charts import Chart
-    from bot.indicators import EMA, RSI, MACD
+    from bot.indicators import EMA, RSI, MACD, QuantumIndicator
+
+    try:
+        from ui.compass import CompassProxy
+    except ImportError:
+        CompassProxy = None
 
     # Calcul de la hauteur relative (Main vs Subcharts)
     # Si on a 2 indicateurs (RSI + MACD) -> Main 50%, RSI 25%, MACD 25%
@@ -34,10 +39,23 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
     has_rsi = bool(rsi_config)
     has_macd = bool(macd_config)
     
+    # Flags locaux par paire
+    show_quantum_line = False
+    show_quantum_window = False
+    if quantum_config:
+        show_quantum_line = quantum_config.get("show_line", False)
+        show_quantum_window = quantum_config.get("show_window", False)
+
+    # Le subchart linéaire n'existe que si show_quantum_line est True
+    subcharts_count = sum([has_rsi, has_macd, show_quantum_line])
+    
     inner_h = 1.0
-    if has_rsi and has_macd:
-        inner_h = 0.5
-    elif has_rsi or has_macd:
+    if subcharts_count >= 2:
+        if subcharts_count == 3:
+            inner_h = 0.40  # 40% Main, 20% RSI, 20% MACD, 20% Quantum
+        else:
+            inner_h = 0.5  # 50% Main, 25% Sub1, 25% Sub2
+    elif subcharts_count == 1:
         inner_h = 0.7
 
     chart = Chart(
@@ -107,9 +125,53 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
             macd_config["signal_period"]
         )
 
+    # --- Quantum Setup (Line Chart) ---
+    quantum_objects = {}
+    quantum_calculator = None
+    quantum_chart_obj = None
+    compass_proxy = None
+
+    # On instancie le calculateur si on a besoin de la ligne OU de la fenêtre
+    if quantum_config:
+        quantum_calculator = QuantumIndicator(
+            lookback=quantum_config.get("lookback", 200),
+            max_n=quantum_config.get("max_n", 4),
+            vol_window=quantum_config.get("vol_window", 50),
+            return_period=quantum_config.get("return_period", 1),
+        )
+
+        # Initialisation Fenêtre 2D
+        if show_quantum_window and CompassProxy:
+            try:
+                compass_proxy = CompassProxy(symbol)
+            except Exception as e:
+                print(f"Erreur lancement Compass 2D: {e}")
+
+    if show_quantum_line:
+        remaining = 1.0 - inner_h
+        sub_h = remaining / subcharts_count if subcharts_count > 0 else 0.3
+
+        quantum_chart_obj = chart.create_subchart(width=1.0, height=sub_h, sync=True)
+        quantum_chart_obj.legend(visible=False)
+        quantum_chart_obj.grid(vert_enabled=False, horz_enabled=False)
+
+        # Lignes de référence
+        quantum_chart_obj.horizontal_line(1, color="#4CAF50", width=1, style="dotted")  # n=0 fondamental
+        quantum_chart_obj.horizontal_line(3, color="#FFEB3B", width=1, style="dotted")  # n=1 premier excité
+
+        omega_line = quantum_chart_obj.create_line("Omega", color=quantum_config.get("omega_color", "#00BCD4"), width=2)
+        sigma_line = quantum_chart_obj.create_line("Sigma bps", color=quantum_config.get("sigma_color", "#FF9800"), width=1)
+
+        quantum_objects = {"omega": omega_line, "sigma": sigma_line}
+
     # --- Warmup ---
+    # history = list of (close, volume) tuples or list of floats (legacy)
     if history:
-        for close in history:
+        for item in history:
+            if isinstance(item, (list, tuple)):
+                close, volume = item[0], item[1]
+            else:
+                close, volume = item, 0.0
             # EMA
             for calc in ema_calculators.values():
                 calc.update(close)
@@ -119,14 +181,18 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
             # MACD
             if macd_calculator:
                 macd_calculator.update(close)
+            # Quantum
+            if quantum_calculator:
+                quantum_calculator.update(close, volume)
 
     # --- State variables ---
     current_candle_time = None
     last_processed_close = None
+    last_processed_volume = 0.0
     initialized_chart = False
-    
+
     async def poll():
-        nonlocal initialized_chart, current_candle_time, last_processed_close
+        nonlocal initialized_chart, current_candle_time, last_processed_close, last_processed_volume
         while True:
             try:
                 while True:
@@ -156,9 +222,21 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
                                 calc.update(last_processed_close)
                             if macd_calculator:
                                 macd_calculator.update(last_processed_close)
+                            if quantum_calculator:
+                                quantum_calculator.update(last_processed_close, last_processed_volume)
+                                # Envoyer la distribution au compass (après fitting)
+                                if compass_proxy and quantum_calculator.initialized:
+                                    q = quantum_calculator
+                                    if q.r_grid is not None and q.fitted_pdf is not None and q.empirical_hist is not None:
+                                        compass_proxy.update_distribution(
+                                            q.energy_level, q.omega, q.sigma, q.fit_quality,
+                                            q.r_grid, q.fitted_pdf,
+                                            q.empirical_hist[0], q.empirical_hist[1]
+                                        )
 
                         current_candle_time = this_time
                         last_processed_close = close_price
+                        last_processed_volume = candle.get("volume", candle.get("_vol", 0.0))
 
                         # 3. Live Indicator Updates (Compute Next)
                         time_idx = this_time
@@ -194,6 +272,29 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
                                     macd_objects["macd"].set(pd.DataFrame([{"time": time_idx, "MACD": m_val}]))
                                     macd_objects["signal"].set(pd.DataFrame([{"time": time_idx, "Signal": s_val}]))
                                     macd_objects["hist"].set(pd.DataFrame([{"time": time_idx, "Hist": h_val}]))
+                        
+                        # Quantum
+                        if quantum_calculator:
+                            res = quantum_calculator.compute_next(close_price)
+                            if res is not None:
+                                o_val, s_val, fq_val = res
+
+                                # 1. Update Line Chart (si activé)
+                                if show_quantum_line and quantum_objects:
+                                    # Sigma en basis points (×10000) pour être visible à côté d'Omega
+                                    s_bps = s_val * 10000
+                                    try:
+                                        quantum_objects["omega"].update(pd.Series({"time": time_idx, "Omega": o_val}))
+                                        quantum_objects["sigma"].update(pd.Series({"time": time_idx, "Sigma bps": s_bps}))
+                                    except Exception:
+                                        quantum_objects["omega"].set(pd.DataFrame([{"time": time_idx, "Omega": o_val}]))
+                                        quantum_objects["sigma"].set(pd.DataFrame([{"time": time_idx, "Sigma bps": s_bps}]))
+
+                                # 2. Update compass tick (marqueur return courant)
+                                if compass_proxy:
+                                    cr = quantum_calculator.current_return(close_price)
+                                    if cr is not None:
+                                        compass_proxy.update_tick(cr)
 
                     elif msg[0] == "order_line":
                         _, side, price, amount = msg
@@ -283,11 +384,11 @@ _all_proxies: list = []
 class _ChartProxy:
     """Proxy vers un chart dans un process séparé."""
     def __init__(self, symbol: str, config: dict, candle_sec: int, ema_config: list,
-                 rsi_config: list, macd_config: dict, history: list = None):
+                 rsi_config: list, macd_config: dict, quantum_config: dict, history: list = None):
         self._q = mp.Queue()
         self._proc = mp.Process(
             target=_chart_worker,
-            args=(symbol, config, candle_sec, ema_config, rsi_config, macd_config, self._q, history or []),
+            args=(symbol, config, candle_sec, ema_config, rsi_config, macd_config, quantum_config, self._q, history or []),
             daemon=False,
         )
         self._proc.start()
@@ -297,12 +398,15 @@ class _ChartProxy:
         self._q.put(msg)
 
     def terminate(self):
+        self._q.close()
+        self._q.cancel_join_thread()
         if self._proc.is_alive():
             import signal
             try:
                 os.killpg(self._proc.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            self._proc.join(timeout=0.1)
 
 
 class _PnlProxy:
@@ -321,12 +425,15 @@ class _PnlProxy:
         self._q.put(msg)
 
     def terminate(self):
+        self._q.close()
+        self._q.cancel_join_thread()
         if self._proc.is_alive():
             import signal
             try:
                 os.killpg(self._proc.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            self._proc.join(timeout=0.1)
 
 
 def create_pnl_chart(config: dict):
