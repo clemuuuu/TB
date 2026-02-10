@@ -5,6 +5,8 @@ Latex/
 .claude/
 crash.log
 .env
+CLAUDE.md
+
 
 # === PYTHON STANDARD (Template GitHub) ===
 # Byte-compiled / optimized / DLL files
