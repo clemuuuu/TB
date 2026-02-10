@@ -22,25 +22,40 @@ Fermeture automatique des positions ouvertes à l'arrêt (`Ctrl+C`).
 
 ## Pré-requis
 
-- Python 3.14 avec le venv `spyder-env`
-- Packages : `ccxt`, `lightweight-charts`, `pandas`, `pyyaml`, `peewee`, `rich`, `aiohttp`
-- GTK (`pywebview`) pour la fenêtre du graphique
-- Clés API testnet Binance (https://testnet.binance.vision)
+- **Python 3.14+**
+- **Packages** : installés via `pip install -r requirements.txt`
+- **GTK + WebKitGTK** (pour les fenêtres graphiques via `pywebview`)
+  - **Linux** : installer `gtk3` et `webkit2gtk` via votre gestionnaire de paquets
+    (ex: `sudo pacman -S webkit2gtk` sur Arch, `sudo apt install gir1.2-webkit2-4.1` sur Debian/Ubuntu)
+  - **Windows** : pywebview utilise Edge/Chromium par défaut, pas besoin de GTK.
+    Installer `.NET Framework 4.6.2+` si nécessaire
+  - **macOS** : pywebview utilise WebKit nativement, rien à installer
+- **Clés API Binance testnet** : https://testnet.binance.vision (pour les ordres sandbox)
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/clemuuuu/TB.git
+cd TB
+python -m venv venv
+source venv/bin/activate        # Linux/macOS
+# venv\Scripts\activate         # Windows
+pip install -r requirements.txt
+cp config.example.yaml config.yaml
+```
+
+Editer `config.yaml` avec vos clés API Binance testnet.
 
 ---
 
 ## Lancement
-0. rename config.example.yaml to config.yaml
-1. Activer l'environnement,
-2. Se placer dans le dossier :
-   ```bash
-   cd ~/TB
-   ```
-3. Lancer le bot :
-   ```bash
-   python main.py                 # avec graphiques
-   python main.py --no-chart      # terminal seul, sans fenêtres
-   ```
+
+```bash
+python main.py                 # avec graphiques
+python main.py --no-chart      # terminal seul, sans fenêtres
+```
 
 - Une fenêtre s'ouvre par paire (chart + RSI + MACD) + 1 fenêtre PNL
   (2 paires = 2 fenêtres chart + 1 fenêtre PNL = 3 fenêtres).

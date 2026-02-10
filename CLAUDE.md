@@ -22,11 +22,10 @@ Le user parle français.
 - **Prochaine étape** : coder une stratégie dans `bot/strategy.py`
 
 ## Environnement
-- Python 3.14 — `source ~/spyder-env/bin/activate` (OBLIGATOIRE avant de lancer)
-- Projet : `/home/extra/TB` (symlink `~/TB`)
-- Venv : `/home/extra/spyder-env` (symlink `~/spyder-env`)
+- Python 3.10+ — Activer un venv avant de lancer
+- Venv : Libre (nommé `spyder-env` sur la machine de dev actuelle)
 - Lancement : `cd ~/TB && python main.py`
-- GTK/gi : symlinké manuellement dans le venv depuis `/usr/lib/python3.14/site-packages/gi`
+- GTK/gi (Linux) : Doit être accessible dans le venv (souvent via un lien symbolique vers `/usr/lib/python3/dist-packages/gi`)
 
 ## Architecture
 ```
