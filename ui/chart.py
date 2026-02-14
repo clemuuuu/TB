@@ -24,7 +24,42 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
 
     import asyncio
     from lightweight_charts import Chart
+    from lightweight_charts.chart import PyWV
+    from webview.errors import JavascriptException as _JsErr
     from bot.indicators import EMA, RSI, MACD, QuantumIndicator
+
+    # Monkey-patch PyWV.loop : avaler les JavascriptException au lieu de
+    # crasher Thread-2 (le sync crosshair de lwc lance "Value is null"
+    # quand une série synced n'a pas encore de données).
+    def _patched_loop(self):
+        import webview as _wv
+        while self.is_alive:
+            i, arg = self.queue.get()
+            if i == 'start':
+                _wv.start(debug=arg, func=self.loop)
+                self.is_alive = False
+                self.emit_queue.put('exit')
+                return
+            if i == 'create_window':
+                self.create_window(*arg)
+                continue
+            window = self.windows[i]
+            if arg == 'show':
+                window.show()
+            elif arg == 'hide':
+                window.hide()
+            else:
+                try:
+                    if '_~_~RETURN~_~_' in arg:
+                        self.return_queue.put(window.evaluate_js(arg[14:]))
+                    else:
+                        window.evaluate_js(arg)
+                except KeyError:
+                    return
+                except _JsErr:
+                    pass  # Avaler l'erreur JS, Thread-2 survit
+
+    PyWV.loop = _patched_loop
 
     try:
         from ui.compass import CompassProxy
@@ -205,15 +240,7 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
                         this_time = clean["time"]
                         close_price = candle["close"]
 
-                        # 1. Update Main Price Chart
-                        if not initialized_chart:
-                            chart.set(pd.DataFrame([clean]))
-                            initialized_chart = True
-                        else:
-                            chart.update(pd.Series(clean))
-                        chart.topbar["price"].set(f"{close_price:.2f}")
-
-                        # 2. Candle Change Detection (validation cloture)
+                        # 1. Candle Change Detection (validation cloture)
                         if current_candle_time is not None and this_time != current_candle_time:
                             # Clôture bougie précédente -> update indicateurs (EMA, RSI, MACD)
                             for calc in ema_calculators.values():
@@ -238,9 +265,11 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
                         last_processed_close = close_price
                         last_processed_volume = candle.get("volume", candle.get("_vol", 0.0))
 
-                        # 3. Live Indicator Updates (Compute Next)
+                        # 2. Indicator Updates AVANT le chart principal
+                        # (le sync crosshair de lwc accède aux séries subcharts
+                        #  lors du chart.update → elles doivent avoir des données)
                         time_idx = this_time
-                        
+
                         # EMA
                         for period, line in ema_lines.items():
                             val = ema_calculators[period].compute_next(close_price)
@@ -272,14 +301,14 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
                                     macd_objects["macd"].set(pd.DataFrame([{"time": time_idx, "MACD": m_val}]))
                                     macd_objects["signal"].set(pd.DataFrame([{"time": time_idx, "Signal": s_val}]))
                                     macd_objects["hist"].set(pd.DataFrame([{"time": time_idx, "Hist": h_val}]))
-                        
+
                         # Quantum
                         if quantum_calculator:
                             res = quantum_calculator.compute_next(close_price)
                             if res is not None:
                                 o_val, s_val, fq_val = res
 
-                                # 1. Update Line Chart (si activé)
+                                # Update Line Chart (si activé)
                                 if show_quantum_line and quantum_objects:
                                     # Sigma en basis points (×10000) pour être visible à côté d'Omega
                                     s_bps = s_val * 10000
@@ -290,11 +319,20 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
                                         quantum_objects["omega"].set(pd.DataFrame([{"time": time_idx, "Omega": o_val}]))
                                         quantum_objects["sigma"].set(pd.DataFrame([{"time": time_idx, "Sigma bps": s_bps}]))
 
-                                # 2. Update compass tick (marqueur return courant)
+                                # Update compass tick (marqueur return courant)
                                 if compass_proxy:
                                     cr = quantum_calculator.current_return(close_price)
                                     if cr is not None:
                                         compass_proxy.update_tick(cr)
+
+                        # 3. Main Chart Update (APRÈS les subcharts pour éviter
+                        #    "Value is null" dans le sync crosshair)
+                        if not initialized_chart:
+                            chart.set(pd.DataFrame([clean]))
+                            initialized_chart = True
+                        else:
+                            chart.update(pd.Series(clean))
+                        chart.topbar["price"].set(f"{close_price:.2f}")
 
                     elif msg[0] == "order_line":
                         _, side, price, amount = msg

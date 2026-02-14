@@ -6,7 +6,8 @@ Latex/
 crash.log
 .env
 CLAUDE.md
-
+input.md
+paperquant.pdf
 
 # === PYTHON STANDARD (Template GitHub) ===
 # Byte-compiled / optimized / DLL files

@@ -57,6 +57,9 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
   - `inner_height` sur le chart principal pour répartir l'espace (0.5 si 2 subcharts, 0.7 si 1)
   - `sync=True` pour synchroniser les axes temporels
   - `grid(vert_enabled=False, horz_enabled=False)` pour un rendu propre
+  - **BUG crosshair sync** : `sync=True` + `series.update()` → le mécanisme de sync itère sur TOUTES les séries synced. Si une série n'a pas de données → `Value is null` JS error qui tue Thread-2 (le thread d'évaluation JS de PyWV). Le crash est **bidirectionnel** : update du main chart OU d'un subchart peut trigger le sync sur les autres.
+  - **Fix** : monkey-patch de `PyWV.loop` dans `_chart_worker` pour avaler `JavascriptException` au lieu de `raise` (Thread-2 survit). Hérité par le process PyWV via `mp.set_start_method("fork")`.
+  - **Ordre des updates** : les indicator line updates sont pushées AVANT le `chart.set()`/`chart.update()` du main chart. Réduit la fréquence de l'erreur (les subcharts ont déjà des données quand le sync fire). Le monkey-patch est le filet de sécurité.
 - **Légende** : `legend(visible=True, ohlc=True, lines=True)` sur le chart principal UNIQUEMENT
   - **BUG** : `legend(visible=True)` sur les subcharts crash le legendHandler JS (`t.seriesData.get` undefined)
   - Les subcharts DOIVENT avoir `legend(visible=False)` — c'est un bug dans lightweight-charts, pas contournable
@@ -85,7 +88,7 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
 - Classes `EMA`, `RSI` et `MACD` séparées du chart — réutilisables dans `bot/strategy.py`
 - Chaque classe a `update(close)` (bougie complète) et `compute_next(price)` (preview live sans modifier l'état)
 - **Indicateurs convergents** : au démarrage, 200 bougies 1m sont chargées via REST Binance (données publiques) et passées au worker pour warmup. Les indicateurs affichent une valeur convergée dès la première bougie live. Le fetch est fait une seule fois et partagé entre tous les indicateurs.
-- **Pour ajouter un indicateur** : créer la classe dans `bot/indicators.py`, ajouter le warmup + compute_next dans `_chart_worker`, ajouter le flag dans `symbol_flags` et `config.yaml`
+- **Pour ajouter un indicateur** : créer la classe dans `bot/indicators.py`, ajouter le warmup + compute_next dans `_chart_worker` (section 2 "Indicator Updates", AVANT le main chart update section 3), ajouter le flag dans `symbol_flags` et `config.yaml`. **IMPORTANT** : les line updates des subcharts DOIVENT être dans la section 2 (avant `chart.set()`/`chart.update()`) sinon le crosshair sync crash.
 - **EMA** : overlay via `create_line()` sur le chart candlestick principal
   - Configurable dans `config.yaml` section `ema:` (liste de {period, color, width})
   - Calcul : SMA initial puis EMA classique
