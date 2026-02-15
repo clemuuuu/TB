@@ -5,46 +5,6 @@ Bot de trading crypto Binance Spot avec graphiques candlestick live, indicateurs
 Supporte plusieurs paires simultanément (BTC/USDT, ETH/BTC, DOT/USDT, etc.)
 avec une fenêtre par paire (un process Python par chart).
 
-### Indicateurs techniques
-- **EMA** en overlay sur chaque chart (période, couleur, épaisseur configurables)
-- **RSI** en subchart sous le chart principal (période, couleur configurables)
-- **MACD** en subchart sous le RSI (fast/slow/signal, couleurs configurables)
-
-### Indicateurs quantiques (BETA) — Li Lin 2024 ([arXiv:2401.05823](https://arxiv.org/abs/2401.05823))
-
-Le modèle fitte la distribution des log-returns sur les fonctions propres de l'oscillateur harmonique quantique (Hermite-Gauss). Le niveau d'énergie **Ω = 2n+1** caractérise l'état du marché :
-- **Ω = 1** (n=0) : distribution gaussienne → marché calme
-- **Ω = 3** (n=1) : distribution bimodale → 2 régimes de prix
-- **Ω ≥ 5** (n≥2) : distribution multimodale → marché volatile
-
-3 modes d'affichage (activables indépendamment par paire) :
-
-| Mode | Flag config | Description |
-|------|-------------|-------------|
-| **Subchart linéaire** (BETA) | `quantum_line` | Lignes Ω (cyan) + σ en basis points (orange) avec références à n=0 et n=1 |
-| **Distribution 2D** (BETA) | `quantum_window` | Histogramme empirique + courbe PDF fittée (Hermite-Gauss) + marqueur du return courant |
-| **Lin Compass ATI** (BETA) | `lin_compass` | Compass Active Trading Intention — cercle unitaire avec vecteur e^{iθ(r)} indiquant le sentiment de marché |
-
-Le **Lin Compass (ATI)** extrait la phase θ(r) via la transformée de Hilbert de l'eigenfonction φ_n, et affiche un vecteur sur le plan complexe avec 4 quadrants (fidèle à la Figure 2 du paper) :
-- **+Re** : Adding Position (accumulation)
-- **-Re** : Trimming Position (allègement)
-- **-Im** : Bullish
-- **+Im** : Bearish
-
-La distribution et le compass partagent la même fenêtre (layout flex côte à côte) pour économiser la RAM.
-
-> **BETA** : L'indicateur quantique (distribution + compass ATI) est fonctionnel mais en phase de test. Les paramètres et l'interprétation des signaux sont encore en cours d'affinage.
-
-### Autres features
-- **Ordres live** : exécution sandbox (testnet) ou réel, avec lignes pointillées sur le chart
-- **PNL temps réel** : tracking par paire dans le terminal + graphique PNL total (fenêtre dédiée)
-- **Bougies custom** : construites à la volée depuis les trades websocket (timeframe libre)
-- **Indicateurs convergents** : 200 bougies 1m chargées au démarrage pour warmup
-- Fermeture automatique des positions ouvertes à l'arrêt (`Ctrl+C`)
-
-
------
-
 ## Pré-requis
 
 - **Python 3.14+**
@@ -125,6 +85,46 @@ symbols:
 Ancien format aussi supporté : `- BTC/USDT` (tout activé par défaut sauf quantum).
 Les flags contrôlent l'affichage des charts, pas le calcul.
 La fenêtre Quantum s'ouvre si `quantum_window` ou `lin_compass` est `true` (les deux panneaux partagent la même fenêtre).
+
+
+### Indicateurs techniques
+- **EMA** en overlay sur chaque chart (période, couleur, épaisseur configurables)
+- **RSI** en subchart sous le chart principal (période, couleur configurables)
+- **MACD** en subchart sous le RSI (fast/slow/signal, couleurs configurables)
+
+### Indicateurs quantiques (BETA) — Li Lin 2024 ([arXiv:2401.05823](https://arxiv.org/abs/2401.05823))
+
+Le modèle fitte la distribution des log-returns sur les fonctions propres de l'oscillateur harmonique quantique (Hermite-Gauss). Le niveau d'énergie **Ω = 2n+1** caractérise l'état du marché :
+- **Ω = 1** (n=0) : distribution gaussienne → marché calme
+- **Ω = 3** (n=1) : distribution bimodale → 2 régimes de prix
+- **Ω ≥ 5** (n≥2) : distribution multimodale → marché volatile
+
+3 modes d'affichage (activables indépendamment par paire) :
+
+| Mode | Flag config | Description |
+|------|-------------|-------------|
+| **Subchart linéaire** (BETA) | `quantum_line` | Lignes Ω (cyan) + σ en basis points (orange) avec références à n=0 et n=1 |
+| **Distribution 2D** (BETA) | `quantum_window` | Histogramme empirique + courbe PDF fittée (Hermite-Gauss) + marqueur du return courant |
+| **Lin Compass ATI** (BETA) | `lin_compass` | Compass Active Trading Intention — cercle unitaire avec vecteur e^{iθ(r)} indiquant le sentiment de marché |
+
+Le **Lin Compass (ATI)** extrait la phase θ(r) via la transformée de Hilbert de l'eigenfonction φ_n, et affiche un vecteur sur le plan complexe avec 4 quadrants (fidèle à la Figure 2 du paper) :
+- **+Re** : Adding Position (accumulation)
+- **-Re** : Trimming Position (allègement)
+- **-Im** : Bullish
+- **+Im** : Bearish
+
+La distribution et le compass partagent la même fenêtre (layout flex côte à côte) pour économiser la RAM.
+
+> **BETA** : L'indicateur quantique (distribution + compass ATI) est fonctionnel mais en phase de test. Les paramètres et l'interprétation des signaux sont encore en cours d'affinage.
+
+### Autres features
+- **Ordres live** : exécution sandbox (testnet) ou réel, avec lignes pointillées sur le chart
+- **PNL temps réel** : tracking par paire dans le terminal + graphique PNL total (fenêtre dédiée)
+- **Bougies custom** : construites à la volée depuis les trades websocket (timeframe libre)
+- **Indicateurs convergents** : 200 bougies 1m chargées au démarrage pour warmup
+- Fermeture automatique des positions ouvertes à l'arrêt (`Ctrl+C`)
+
+
 
 ### Chart
 
