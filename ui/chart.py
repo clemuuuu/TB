@@ -77,9 +77,11 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
     # Flags locaux par paire
     show_quantum_line = False
     show_quantum_window = False
+    show_lin_compass = False
     if quantum_config:
         show_quantum_line = quantum_config.get("show_line", False)
         show_quantum_window = quantum_config.get("show_window", False)
+        show_lin_compass = quantum_config.get("show_lin_compass", False)
 
     # Le subchart linéaire n'existe que si show_quantum_line est True
     subcharts_count = sum([has_rsi, has_macd, show_quantum_line])
@@ -175,10 +177,12 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
             return_period=quantum_config.get("return_period", 1),
         )
 
-        # Initialisation Fenêtre 2D
-        if show_quantum_window and CompassProxy:
+        # Initialisation Fenêtre 2D (distribution + Lin Compass ATI)
+        if (show_quantum_window or show_lin_compass) and CompassProxy:
             try:
-                compass_proxy = CompassProxy(symbol)
+                compass_proxy = CompassProxy(symbol,
+                                             show_dist=show_quantum_window,
+                                             show_compass=show_lin_compass)
             except Exception as e:
                 print(f"Erreur lancement Compass 2D: {e}")
 
@@ -319,11 +323,15 @@ def _chart_worker(symbol: str, config: dict, candle_sec: int,
                                         quantum_objects["omega"].set(pd.DataFrame([{"time": time_idx, "Omega": o_val}]))
                                         quantum_objects["sigma"].set(pd.DataFrame([{"time": time_idx, "Sigma bps": s_bps}]))
 
-                                # Update compass tick (marqueur return courant)
+                                # Update compass tick (marqueur return courant + phase ATI)
                                 if compass_proxy:
                                     cr = quantum_calculator.current_return(close_price)
                                     if cr is not None:
                                         compass_proxy.update_tick(cr)
+                                        if show_lin_compass:
+                                            theta = quantum_calculator.compute_phase(cr)
+                                            if theta is not None:
+                                                compass_proxy.update_phase(theta)
 
                         # 3. Main Chart Update (APRÈS les subcharts pour éviter
                         #    "Value is null" dans le sync crosshair)

@@ -13,6 +13,7 @@ trading:
       macd: true
       quantum_line: true
       quantum_window: true
+      lin_compass: true          # ATI compass (Li Lin 2024) — dans le subchart quantum
     - symbol: ETH/USDT
       ema: true
       rsi: true

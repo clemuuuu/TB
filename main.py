@@ -75,6 +75,7 @@ async def main(use_chart: bool = True):
                 "macd": entry.get("macd", True),
                 "quantum_line": entry.get("quantum_line", False),
                 "quantum_window": entry.get("quantum_window", False),
+                "lin_compass": entry.get("lin_compass", False),
             }
     candle_sec = config["trading"]["candle_seconds"]
 
@@ -118,10 +119,11 @@ async def main(use_chart: bool = True):
             
             # On combine la config quantum globale avec les flags locaux
             sym_quantum = None
-            if quantum_config and (flags["quantum_line"] or flags["quantum_window"]):
+            if quantum_config and (flags["quantum_line"] or flags["quantum_window"] or flags.get("lin_compass")):
                 sym_quantum = quantum_config.copy()
                 sym_quantum["show_line"] = flags["quantum_line"]
                 sym_quantum["show_window"] = flags["quantum_window"]
+                sym_quantum["show_lin_compass"] = flags.get("lin_compass", False)
 
             history = historical_data.get(sym, [])
             charts[sym] = _ChartProxy(sym, config["chart"], candle_sec, 
@@ -170,6 +172,7 @@ async def main(use_chart: bool = True):
         if flags["macd"]: indicators.append("MACD")
         if flags.get("quantum_line"): indicators.append("Quantum(Chart)")
         if flags.get("quantum_window"): indicators.append("Quantum(2D)")
+        if flags.get("lin_compass"): indicators.append("Lin Compass")
         ind_str = "+".join(indicators) if indicators else "aucun indicateur"
         log.info(f"  {sym} — {ind_str}")
     log.info(f"Bougies {candle_sec}s ({mode})")

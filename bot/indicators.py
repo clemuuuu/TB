@@ -1,6 +1,7 @@
 
 import numpy as np
 from scipy.special import eval_hermite
+from scipy.signal import hilbert as _hilbert
 from math import lgamma, log, pi, sqrt, exp
 
 
@@ -38,6 +39,10 @@ class QuantumIndicator:
         self.r_grid: np.ndarray | None = None
         self.fitted_pdf: np.ndarray | None = None
         self.empirical_hist: tuple | None = None  # (counts, bin_edges)
+
+        # Pour Lin Compass (ATI) : grille de phase via Hilbert
+        self._xi_grid: np.ndarray | None = None
+        self._phase_grid: np.ndarray | None = None
 
     def update(self, close: float, volume: float = 0.0):
         """Met à jour l'indicateur avec une bougie clôturée."""
@@ -105,6 +110,7 @@ class QuantumIndicator:
             self.sigma = 1e-10
             self.fit_quality = 0.0
             self._build_display(returns)
+            self._compute_phase_grid()
             return
 
         best_n = 0
@@ -139,6 +145,7 @@ class QuantumIndicator:
         self.fit_quality = best_ll
 
         self._build_display(returns)
+        self._compute_phase_grid()
 
     def _build_display(self, returns: np.ndarray):
         """Construit la grille + PDF fittée + histogramme empirique pour le compass."""
@@ -160,6 +167,45 @@ class QuantumIndicator:
             self.fitted_pdf = np.exp(np.clip(log_pdf, -50, 50))
         else:
             self.fitted_pdf = np.zeros_like(self.r_grid)
+
+    def _compute_phase_grid(self):
+        """Calcule la grille de phase θ(ξ) via le signal analytique (Hilbert).
+
+        L'eigenfonction φ_n(ξ) = H_n(ξ)·e^{-ξ²/2} est réelle.
+        Le signal analytique (Hilbert) donne la phase instantanée θ(ξ).
+        n zeros de H_n → ~n·π de variation de phase.
+        """
+        n = self.energy_level
+        N = 2048
+        xi = np.linspace(-6, 6, N)
+
+        # Eigenfonction ψ_n(ξ) = H_n(ξ) · e^{-ξ²/2}
+        hn = eval_hermite(n, xi)
+        psi = hn * np.exp(-xi**2 / 2)
+
+        # Normalisation
+        norm = np.sqrt(np.trapz(psi**2, xi))
+        if norm > 0:
+            psi /= norm
+
+        # Signal analytique → phase instantanée
+        analytic = _hilbert(psi)
+        self._phase_grid = np.angle(analytic)
+        self._xi_grid = xi
+
+    def compute_phase(self, r: float) -> float | None:
+        """Calcule la phase θ pour un return r via interpolation sur la grille.
+
+        ξ = r / (σ√2), puis interpolation linéaire de θ(ξ).
+        Retourne θ ∈ [-π, π] ou None si pas initialisé.
+        """
+        if self._xi_grid is None or self._phase_grid is None:
+            return None
+        if self.sigma < 1e-15:
+            return None
+        xi = r / (self.sigma * sqrt(2.0))
+        xi = max(float(self._xi_grid[0]), min(float(self._xi_grid[-1]), xi))
+        return float(np.interp(xi, self._xi_grid, self._phase_grid))
 
     def compute_next(self, current_price: float) -> tuple[float, float, float] | None:
         """Prévisualisation live. Retourne (omega, sigma, fit_quality) ou None."""

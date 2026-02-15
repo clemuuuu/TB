@@ -17,6 +17,7 @@ Le user parle français.
 - **RSI subchart** configurable sous le chart principal (section `rsi:` dans config.yaml)
 - **MACD subchart** configurable sous le chart principal (section `macd:` dans config.yaml)
 - **Quantum Indicator** : modèle de Li Lin (2024, arXiv:2401.05823) — fitting Hermite-Gauss sur la distribution des log-returns → niveau d'énergie Ω (état du marché). 2 modes : subchart linéaire (Omega/Sigma) + fenêtre distribution (histogramme + courbe fittée)
+- **Lin Compass (ATI)** : compass Active Trading Intention fidèle au paper Li Lin — cercle unitaire avec vecteur e^{iθ(r)} dans la fenêtre Quantum (`ui/compass.py`, layout flex côte à côte avec la distribution). Phase extraite via transformée de Hilbert. Quadrants : Adding/Trimming × Bullish/Bearish
 - **Légende** visible sur le chart principal (OHLC + noms EMA), désactivée sur les subcharts (bug JS)
 - Fermeture auto des positions ouvertes au Ctrl+C
 - Actuellement : ordres random toutes les 5s par paire pour tester — pas encore de vraie stratégie
@@ -38,7 +39,7 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
 ├── bot/indicators.py    Classes EMA, RSI, MACD, QuantumIndicator (update + compute_next)
 ├── bot/strategy.py      Classe abstraite Strategy (on_candle, on_tick) — À CODER
 ├── ui/chart.py          lightweight-charts — 1 process par paire (chart + subcharts) + 1 PNL
-├── ui/compass.py        Quantum Distribution — fenêtre distribution (histogramme + courbe fittée) par paire
+├── ui/compass.py        Quantum — fenêtre distribution + Lin Compass ATI (layout flex, 1 process par paire)
 ├── db/models.py         Peewee SQLite — Order, Trade
 └── utils/logger.py      rich logger
 ```
@@ -70,11 +71,12 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
 - Le LiveFeed n'utilise PAS le sandbox (données publiques), seul l'Exchange REST utilise sandbox
 - **Filtre NOTIONAL** : les montants d'ordres sont calculés via `min_cost / price * 5-10x` pour respecter le minimum notional Binance (qui utilise un prix moyen 5min)
 - **Arrêt propre** : exception handler silencieux pour les CancelledError ccxt/aiohttp, `killpg` pour les fenêtres
+- **Lin Compass (ATI)** : affiché dans la fenêtre `ui/compass.py` (layout flex côte à côte avec la distribution). La fenêtre s'adapte : distribution seule, compass seul, ou les deux. Pas de process supplémentaire → économie RAM. Phase θ(r) calculée via Hilbert de l'eigenfonction φ_n. Quadrants fidèles au paper Figure 2
 
 ## Config (config.yaml)
 - `exchange.sandbox: true` → testnet Binance (clés API testnet déjà configurées)
 - `trading.symbols` → liste de paires avec indicateurs par paire :
-  - Format nouveau : `- symbol: BTC/USDT` + `ema: true/false` + `rsi: true/false` + `macd: true/false` + `quantum_line: true/false` + `quantum_window: true/false`
+  - Format nouveau : `- symbol: BTC/USDT` + `ema: true/false` + `rsi: true/false` + `macd: true/false` + `quantum_line: true/false` + `quantum_window: true/false` + `lin_compass: true/false`
   - Format ancien : `- BTC/USDT` (rétro-compatible, tous les indicateurs activés par défaut)
   - Ces flags contrôlent uniquement l'affichage des **charts**, pas le calcul pour la stratégie
 - `trading.candle_seconds` → durée bougie en secondes (configurable, ex: 5)
@@ -113,9 +115,12 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
   - `update(close, volume)` au changement de bougie, `compute_next(price)` retourne `(omega, sigma, fit_quality)`
   - `current_return(price)` retourne le log-return courant sur `return_period` bougies pour le marqueur du compass
   - Sigma affiché en **basis points** (×10000) sur le subchart pour être visible à côté d'Omega
-  - 2 modes d'affichage par paire (flags `quantum_line` et `quantum_window` dans config.yaml) :
+  - 3 modes d'affichage par paire (flags `quantum_line`, `quantum_window`, `lin_compass` dans config.yaml) :
     - **Subchart linéaire** : lignes Omega (cyan) + Sigma bps (orange) avec références à Ω=1 et Ω=3
     - **Fenêtre Distribution** : histogramme empirique + courbe PDF fittée + marqueur return courant (`ui/compass.py`)
+    - **Lin Compass (ATI)** : cercle unitaire avec vecteur e^{iθ(r)} — canvas dans la fenêtre `ui/compass.py` (layout flex côte à côte avec la distribution). Phase θ extraite via Hilbert de φ_n, interpolée sur ξ = r/(σ√2). Quadrants fidèles à Figure 2 du paper : +Re=Adding, -Re=Trimming, +Im=Bearish, -Im=Bullish. Flag `lin_compass: true` dans config.yaml. La fenêtre compass s'ouvre si `quantum_window` ou `lin_compass` est true
+  - `compute_phase(r)` : calcule θ ∈ [-π, π] pour un return r via interpolation sur grille ξ
+  - `_compute_phase_grid()` : appelé à chaque `_fit_eigenstate()` — Hilbert de ψ_n(ξ) sur 2048 points ξ ∈ [-6, 6]
 
 ## Pour modifier
 - Ajouter une stratégie → créer une classe dans `bot/strategy.py` héritant de `Strategy`
@@ -123,5 +128,5 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
 - Ajouter/modifier EMA → `config.yaml` > `ema` (ajouter/retirer des entrées period/color/width)
 - Ajouter/modifier RSI → `config.yaml` > `rsi` (ajouter/retirer des entrées period/color/width)
 - Ajouter/modifier MACD → `config.yaml` > `macd` (fast_period, slow_period, signal_period, couleurs)
-- Ajouter/modifier Quantum → `config.yaml` > `quantum` (lookback, return_period, max_n, vol_window, omega_color, sigma_color) + flags par paire (`quantum_line`, `quantum_window`)
+- Ajouter/modifier Quantum → `config.yaml` > `quantum` (lookback, return_period, max_n, vol_window, omega_color, sigma_color) + flags par paire (`quantum_line`, `quantum_window`, `lin_compass`)
 - Changer le style du chart → `ui/chart.py`
