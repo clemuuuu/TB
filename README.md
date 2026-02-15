@@ -1,22 +1,46 @@
-# TB - BENCHMARK For Trading Bot Crypto (Binance)
+# TB - Trading Bot Crypto (Binance)
 
-Une base de Bot de trading crypto qui se connecte à Binance en temps réel via websocket.
+Bot de trading crypto Binance Spot avec graphiques candlestick live, indicateurs techniques et indicateurs quantiques issus de la recherche académique.
+
 Supporte plusieurs paires simultanément (BTC/USDT, ETH/BTC, DOT/USDT, etc.)
 avec une fenêtre par paire (un process Python par chart).
 
-Affiche un graphique candlestick live (style TradingView) avec :
-- **Ordres** marqués par des lignes horizontales pointillées (vert = achat, rouge = vente)
+### Indicateurs techniques
 - **EMA** en overlay sur chaque chart (période, couleur, épaisseur configurables)
 - **RSI** en subchart sous le chart principal (période, couleur configurables)
 - **MACD** en subchart sous le RSI (fast/slow/signal, couleurs configurables)
-- **Quantum Indicator (BETA)** : modèle de Li Lin (2024)  fitting Hermite-Gauss sur la distribution des log-returns pour estimer le niveau d'énergie du marché. 2 modes : subchart linéaire (Omega/Sigma) + fenêtre distribution (histogramme + courbe fittée). Basé sur le paper [arXiv:2401.05823](https://arxiv.org/abs/2401.05823)
-- **Indicateurs convergents** : 200 bougies 1m chargées au démarrage via REST Binance
-  pour que EMA/RSI/MACD affichent des valeurs stables dès la première bougie live
 
-Suivi du PNL (Profit & Loss) par paire en temps réel dans le terminal
-\+ graphique PNL total en temps réel (fenêtre dédiée avec courbe).
+### Indicateurs quantiques (BETA) — Li Lin 2024 ([arXiv:2401.05823](https://arxiv.org/abs/2401.05823))
 
-Fermeture automatique des positions ouvertes à l'arrêt (`Ctrl+C`).
+Le modèle fitte la distribution des log-returns sur les fonctions propres de l'oscillateur harmonique quantique (Hermite-Gauss). Le niveau d'énergie **Ω = 2n+1** caractérise l'état du marché :
+- **Ω = 1** (n=0) : distribution gaussienne → marché calme
+- **Ω = 3** (n=1) : distribution bimodale → 2 régimes de prix
+- **Ω ≥ 5** (n≥2) : distribution multimodale → marché volatile
+
+3 modes d'affichage (activables indépendamment par paire) :
+
+| Mode | Flag config | Description |
+|------|-------------|-------------|
+| **Subchart linéaire** (BETA) | `quantum_line` | Lignes Ω (cyan) + σ en basis points (orange) avec références à n=0 et n=1 |
+| **Distribution 2D** (BETA) | `quantum_window` | Histogramme empirique + courbe PDF fittée (Hermite-Gauss) + marqueur du return courant |
+| **Lin Compass ATI** (BETA) | `lin_compass` | Compass Active Trading Intention — cercle unitaire avec vecteur e^{iθ(r)} indiquant le sentiment de marché |
+
+Le **Lin Compass (ATI)** extrait la phase θ(r) via la transformée de Hilbert de l'eigenfonction φ_n, et affiche un vecteur sur le plan complexe avec 4 quadrants (fidèle à la Figure 2 du paper) :
+- **+Re** : Adding Position (accumulation)
+- **-Re** : Trimming Position (allègement)
+- **-Im** : Bullish
+- **+Im** : Bearish
+
+La distribution et le compass partagent la même fenêtre (layout flex côte à côte) pour économiser la RAM.
+
+> **BETA** : L'indicateur quantique (distribution + compass ATI) est fonctionnel mais en phase de test. Les paramètres et l'interprétation des signaux sont encore en cours d'affinage.
+
+### Autres features
+- **Ordres live** : exécution sandbox (testnet) ou réel, avec lignes pointillées sur le chart
+- **PNL temps réel** : tracking par paire dans le terminal + graphique PNL total (fenêtre dédiée)
+- **Bougies custom** : construites à la volée depuis les trades websocket (timeframe libre)
+- **Indicateurs convergents** : 200 bougies 1m chargées au démarrage pour warmup
+- Fermeture automatique des positions ouvertes à l'arrêt (`Ctrl+C`)
 
 
 -----
@@ -59,7 +83,7 @@ python main.py --no-chart      # terminal seul, sans fenêtres
 ```
 
 - Une fenêtre s'ouvre par paire (chart + subcharts) + 1 fenêtre PNL
-  \+ optionnellement 1 fenêtre distribution quantum par paire.
+  \+ optionnellement 1 fenêtre Quantum par paire (distribution + compass ATI côte à côte).
   Avec `--no-chart`, seul le terminal affiche les ordres et le PNL.
 - Les bougies se construisent toutes les X secondes (réglable dans `config.yaml` > `candle_seconds`).
 - Toutes les Y secondes, un ordre random (buy/sell) est passé par paire (réglable dans `main.py` > `random_orders`).
@@ -96,9 +120,11 @@ symbols:
     macd: true           # afficher subchart MACD
     quantum_line: true   # afficher subchart Omega/Sigma (BETA)
     quantum_window: true # afficher fenêtre distribution (BETA)
+    lin_compass: true    # afficher compass ATI Li Lin 2024 (BETA)
 ```
 Ancien format aussi supporté : `- BTC/USDT` (tout activé par défaut sauf quantum).
 Les flags contrôlent l'affichage des charts, pas le calcul.
+La fenêtre Quantum s'ouvre si `quantum_window` ou `lin_compass` est `true` (les deux panneaux partagent la même fenêtre).
 
 ### Chart
 
@@ -155,12 +181,20 @@ quantum:
 ```
 Supprimer la section `quantum` = pas de Quantum affiché.
 
-> **BETA** : Cet indicateur implémente le modèle de Li Lin (2024)  *"Quantum Probability
+> Cet indicateur implémente le modèle complet de Li Lin (2024) — *"Quantum Probability
 > Theoretic Asset Return Modeling: A Novel Schrödinger-Like Trading Equation and Multimodal
-> Distribution"* ([arXiv:2401.05823](https://arxiv.org/abs/2401.05823)). Il fitte la
-> distribution des log-returns sur les fonctions propres de Hermite-Gauss pour estimer
-> le niveau d'énergie du marché (Ω). Ω=1 = Gaussienne (calme), Ω=3 = bimodale (2 régimes),
-> Ω=5+ = multimodale (volatile). L'indicateur est fonctionnel mais en phase de test.
+> Distribution"* ([arXiv:2401.05823](https://arxiv.org/abs/2401.05823)).
+>
+> **Partie 1 — Distribution (|Ψ|²)** : fitte la distribution des log-returns sur les
+> fonctions propres de Hermite-Gauss (oscillateur harmonique quantique). Le niveau d'énergie
+> Ω = 2n+1 caractérise l'état du marché : Ω=1 (gaussien, calme), Ω=3 (bimodal, 2 régimes),
+> Ω≥5 (multimodal, volatile).
+>
+> **Partie 2 — Phase (ATI Compass)** : la fonction d'onde complète est Ψ(r) = φ(r)·e^{iθ(r)}.
+> La partie 1 donne le module |Ψ|² (distribution). Le compass ATI extrait la phase θ(r) via la
+> transformée de Hilbert du signal analytique de l'eigenfonction φ_n, puis affiche le vecteur
+> e^{iθ} sur un plan complexe à 4 quadrants (Figure 2 du paper) :
+> Adding/Trimming × Bullish/Bearish.
 
 ---
 
@@ -199,6 +233,7 @@ TB/
 │   │                      - RSI : update(close) + compute_next(price)
 │   │                      - MACD : update(close) + compute_next(price) → (macd, signal, hist)
 │   │                      - QuantumIndicator (BETA) : update(close, volume) + compute_next(price)
+│   │                        + compute_phase(r) pour le Lin Compass ATI
 │   │                      - Réutilisables dans strategy.py pour les décisions
 │   │
 │   └── strategy.py      Classe abstraite Strategy (placeholder)
@@ -207,10 +242,10 @@ TB/
 │
 ├── ui/                  INTERFACE GRAPHIQUE
 │   ├── __init__.py
-│   ├── compass.py       Fenêtre distribution quantique (BETA)
-│   │                      - Histogramme empirique + courbe PDF fittée
-│   │                      - Marqueur return courant (ligne rouge)
-│   │                      - Process séparé par paire (pywebview + canvas)
+│   ├── compass.py       Fenêtre Quantum (BETA) (distribution + Lin Compass ATI)
+│   │                      - Layout flex : distribution (gauche) + compass ATI (droite)
+│   │                      - Panneaux conditionnels via show_dist / show_compass
+│   │                      - Process séparé par paire (pywebview + canvas HTML)
 │   └── chart.py         Graphique candlestick live (multiprocessing)
 │                          - lightweight-charts (TradingView) via pywebview
 │                          - 1 process par paire (mp.Process + mp.Queue)
@@ -218,7 +253,7 @@ TB/
 │                          - Chart principal (bougies + EMA overlay)
 │                          - Subchart RSI (create_subchart, lignes 30/70)
 │                          - Subchart MACD (histogramme + ligne MACD + Signal)
-│                          - Subchart Quantum (BETA) (Omega + Sigma bps)
+│                          - Subchart Quantum (Omega + Sigma bps) (BETA)
 │                          - _PnlProxy / _pnl_chart_worker : fenêtre PNL dédiée
 │                          - update_candle() : met à jour la bougie en cours
 │                          - update_pnl() : envoie un point PNL au chart dédié
@@ -248,7 +283,8 @@ Binance Websocket (trades publics)
 LiveFeed (data.py)             1 instance par paire
      │  Construit des bougies de N secondes
      │
-     ├──>  Chart (chart.py)            Bougie + EMA + RSI + MACD (via mp.Queue)
+     ├──>  Chart (chart.py)            Bougie + EMA + RSI + MACD + Quantum (via mp.Queue)
+     │       └──> Compass (compass.py)   Distribution + ATI Compass (sous-process)
      │
      v
 Strategy (strategy.py)              Décide quand acheter/vendre
@@ -288,7 +324,7 @@ Après chaque ordre, le terminal affiche le PNL de la paire concernée :
 
 - [ ] Coder une vraie stratégie dans `bot/strategy.py` (basée sur RSI/EMA/MACD/Quantum)
 - [ ] Remplacer les ordres random par la stratégie
-- [ ] Stabiliser le Quantum Indicator (sortir de la BETA)
+- [ ] Affiner les paramètres du Quantum Indicator
 - [ ] Backtesting sur données historiques
 - [ ] Passer en mode réel quand c'est prêt (`sandbox: false`)
 

@@ -71,7 +71,14 @@ main.py                  Async — boucle sur symbols, 1 feed par paire (asyncio
 - Le LiveFeed n'utilise PAS le sandbox (données publiques), seul l'Exchange REST utilise sandbox
 - **Filtre NOTIONAL** : les montants d'ordres sont calculés via `min_cost / price * 5-10x` pour respecter le minimum notional Binance (qui utilise un prix moyen 5min)
 - **Arrêt propre** : exception handler silencieux pour les CancelledError ccxt/aiohttp, `killpg` pour les fenêtres
-- **Lin Compass (ATI)** : affiché dans la fenêtre `ui/compass.py` (layout flex côte à côte avec la distribution). La fenêtre s'adapte : distribution seule, compass seul, ou les deux. Pas de process supplémentaire → économie RAM. Phase θ(r) calculée via Hilbert de l'eigenfonction φ_n. Quadrants fidèles au paper Figure 2
+- **Fenêtre Quantum** (`ui/compass.py`) : layout flex HTML avec 2 panneaux conditionnels (distribution + compass ATI)
+  - Le `CompassProxy` est instancié dans `_chart_worker` → le process compass est un **sous-process** du chart worker (pas du main)
+  - Tué automatiquement par `os.killpg()` du chart worker (même process group, pas de `setpgrp()` dans le compass)
+  - 3 messages via `mp.Queue` : `"tick"` (return courant, chaque tick), `"dist"` (distribution complète, chaque bougie), `"phase"` (θ pour le compass, chaque tick)
+  - `update_distribution()` JS appelle aussi `drawCompass()` → le compass reçoit n/Ω/σ automatiquement via les données de distribution
+  - Largeur fenêtre : 900px si les 2 panneaux, 500px si un seul
+  - Quadrants du compass : vert (#26a69a) = Long/Q4, rouge (#ef5350) = Short/Q2, orange (#FFA726) = Mixed↑/Q1, bleu (#42A5F5) = Mixed↓/Q3
+  - Canvas : `py = cy - R·sin(θ)` (axe Y inversé en canvas), arc de +Re à θ
 
 ## Config (config.yaml)
 - `exchange.sandbox: true` → testnet Binance (clés API testnet déjà configurées)
