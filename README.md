@@ -105,7 +105,7 @@ Le modèle fitte la distribution des log-returns sur les fonctions propres de l'
 |------|-------------|-------------|
 | **Subchart linéaire** (BETA) | `quantum_line` | Lignes $\Omega$ (cyan) + $\sigma$ en basis points (orange) avec références à $n=0$ et $n=1$ |
 | **Distribution 2D** (BETA) | `quantum_window` | Histogramme empirique + courbe PDF fittée (Hermite-Gauss) + marqueur du return courant |
-| **Lin Compass ATI** (BETA) | `lin_compass` | Compass Active Trading Intention — cercle unitaire avec vecteur $e^{i\theta(r)}$ indiquant le sentiment de marché |
+| **Lin Compass ATI** (BETA) | `lin_compass` | Compass Active Trading Intention — cercle unitaire avec vecteur $\exp(i\theta(r))$ indiquant le sentiment de marché |
 
 Le **Lin Compass (ATI)** extrait la phase $\theta(r)$ via la transformée de Hilbert de l'eigenfonction $\phi_n$, et affiche un vecteur sur le plan complexe avec 4 quadrants (fidèle à la Figure 2 du paper) :
 - **+Re** : Adding Position (accumulation)
@@ -190,10 +190,10 @@ Supprimer la section `quantum` = pas de Quantum affiché.
 > $\Omega = 2n+1$ caractérise l'état du marché : $\Omega=1$ (gaussien, calme), $\Omega=3$ (bimodal, 2 régimes),
 > $\Omega \ge 5$ (multimodal, volatile).
 >
-> **Partie 2 — Phase (ATI Compass)** : la fonction d'onde complète est $\Psi(r) = \phi(r) e^{i\theta(r)}$.
+> **Partie 2 — Phase (ATI Compass)** : la fonction d'onde complète est $\Psi(r) = \phi(r) \exp(i\theta(r))$.
 > La partie 1 donne le module $|\Psi|^2$ (distribution). Le compass ATI extrait la phase $\theta(r)$ via la
 > transformée de Hilbert du signal analytique de l'eigenfonction $\phi_n$, puis affiche le vecteur
-> $e^{i\theta}$ sur un plan complexe à 4 quadrants (Figure 2 du paper) :
+> $\exp(i\theta)$ sur un plan complexe à 4 quadrants (Figure 2 du paper) :
 > Adding/Trimming × Bullish/Bearish.
 
 ---
