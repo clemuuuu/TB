@@ -12,9 +12,9 @@ HTML_TEMPLATE = """
     <style>
         body {{ margin: 0; padding: 0; background-color: #111; overflow: hidden; font-family: 'Courier New', monospace; }}
         #container {{ display: flex; width: 100vw; height: 100vh; }}
-        #dist-panel {{ flex: {dist_flex}; display: {dist_display}; position: relative; }}
-        #compass-panel {{ flex: {compass_flex}; display: {compass_display}; position: relative; border-left: {border}; }}
-        canvas {{ display: block; }}
+        #dist-panel {{ flex: {dist_flex}; display: {dist_display}; position: relative; overflow: hidden; }}
+        #compass-panel {{ flex: {compass_flex}; display: {compass_display}; position: relative; border-left: {border}; overflow: hidden; }}
+        canvas {{ display: block; width: 100%; height: 100%; }}
         #overlay {{ position: absolute; top: 10px; left: 10px; color: #0f0; font-size: 13px; pointer-events: none; line-height: 1.6; z-index: 10; }}
         #title {{ position: absolute; top: 10px; right: 10px; color: #888; font-size: 11px; pointer-events: none; z-index: 10; }}
     </style>
