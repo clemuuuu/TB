@@ -94,20 +94,20 @@ La fenêtre Quantum s'ouvre si `quantum_window` ou `lin_compass` est `true` (les
 
 ### Indicateurs quantiques (BETA) — Li Lin 2024 ([arXiv:2401.05823](https://arxiv.org/abs/2401.05823))
 
-Le modèle fitte la distribution des log-returns sur les fonctions propres de l'oscillateur harmonique quantique (Hermite-Gauss). Le niveau d'énergie **Ω = 2n+1** caractérise l'état du marché :
-- **Ω = 1** (n=0) : distribution gaussienne → marché calme
-- **Ω = 3** (n=1) : distribution bimodale → 2 régimes de prix
-- **Ω ≥ 5** (n≥2) : distribution multimodale → marché volatile
+Le modèle fitte la distribution des log-returns sur les fonctions propres de l'oscillateur harmonique quantique (Hermite-Gauss). Le niveau d'énergie $\Omega = 2n+1$ caractérise l'état du marché :
+- $\Omega = 1$ ($n=0$) : distribution gaussienne → marché calme
+- $\Omega = 3$ ($n=1$) : distribution bimodale → 2 régimes de prix
+- $\Omega \ge 5$ ($n \ge 2$) : distribution multimodale → marché volatile
 
 3 modes d'affichage (activables indépendamment par paire) :
 
 | Mode | Flag config | Description |
 |------|-------------|-------------|
-| **Subchart linéaire** (BETA) | `quantum_line` | Lignes Ω (cyan) + σ en basis points (orange) avec références à n=0 et n=1 |
+| **Subchart linéaire** (BETA) | `quantum_line` | Lignes $\Omega$ (cyan) + $\sigma$ en basis points (orange) avec références à $n=0$ et $n=1$ |
 | **Distribution 2D** (BETA) | `quantum_window` | Histogramme empirique + courbe PDF fittée (Hermite-Gauss) + marqueur du return courant |
-| **Lin Compass ATI** (BETA) | `lin_compass` | Compass Active Trading Intention — cercle unitaire avec vecteur e^{iθ(r)} indiquant le sentiment de marché |
+| **Lin Compass ATI** (BETA) | `lin_compass` | Compass Active Trading Intention — cercle unitaire avec vecteur $e^{i\theta(r)}$ indiquant le sentiment de marché |
 
-Le **Lin Compass (ATI)** extrait la phase θ(r) via la transformée de Hilbert de l'eigenfonction φ_n, et affiche un vecteur sur le plan complexe avec 4 quadrants (fidèle à la Figure 2 du paper) :
+Le **Lin Compass (ATI)** extrait la phase $\theta(r)$ via la transformée de Hilbert de l'eigenfonction $\phi_n$, et affiche un vecteur sur le plan complexe avec 4 quadrants (fidèle à la Figure 2 du paper) :
 - **+Re** : Adding Position (accumulation)
 - **-Re** : Trimming Position (allègement)
 - **-Im** : Bullish
@@ -185,15 +185,15 @@ Supprimer la section `quantum` = pas de Quantum affiché.
 > Theoretic Asset Return Modeling: A Novel Schrödinger-Like Trading Equation and Multimodal
 > Distribution"* ([arXiv:2401.05823](https://arxiv.org/abs/2401.05823)).
 >
-> **Partie 1 — Distribution (|Ψ|²)** : fitte la distribution des log-returns sur les
+> **Partie 1 — Distribution ($|\Psi|^2$)** : fitte la distribution des log-returns sur les
 > fonctions propres de Hermite-Gauss (oscillateur harmonique quantique). Le niveau d'énergie
-> Ω = 2n+1 caractérise l'état du marché : Ω=1 (gaussien, calme), Ω=3 (bimodal, 2 régimes),
-> Ω≥5 (multimodal, volatile).
+> $\Omega = 2n+1$ caractérise l'état du marché : $\Omega=1$ (gaussien, calme), $\Omega=3$ (bimodal, 2 régimes),
+> $\Omega \ge 5$ (multimodal, volatile).
 >
-> **Partie 2 — Phase (ATI Compass)** : la fonction d'onde complète est Ψ(r) = φ(r)·e^{iθ(r)}.
-> La partie 1 donne le module |Ψ|² (distribution). Le compass ATI extrait la phase θ(r) via la
-> transformée de Hilbert du signal analytique de l'eigenfonction φ_n, puis affiche le vecteur
-> e^{iθ} sur un plan complexe à 4 quadrants (Figure 2 du paper) :
+> **Partie 2 — Phase (ATI Compass)** : la fonction d'onde complète est $\Psi(r) = \phi(r) e^{i\theta(r)}$.
+> La partie 1 donne le module $|\Psi|^2$ (distribution). Le compass ATI extrait la phase $\theta(r)$ via la
+> transformée de Hilbert du signal analytique de l'eigenfonction $\phi_n$, puis affiche le vecteur
+> $e^{i\theta}$ sur un plan complexe à 4 quadrants (Figure 2 du paper) :
 > Adding/Trimming × Bullish/Bearish.
 
 ---
