@@ -50,7 +50,7 @@ python main.py --no-chart      # terminal seul, sans fenêtres
 - Chaque ordre apparaît comme une ligne pointillée horizontale sur la bonne fenêtre.
 - Le PNL par paire s'affiche dans le terminal après chaque ordre.
 - Le PNL total s'affiche en temps réel dans la fenêtre PNL (courbe + topbar).
-- `Ctrl+C` dans le terminal pour arrêter proprement.
+- `Ctrl+C` dans le terminal pour arrêter proprement. Par défaut les positions ouvertes se ferment à l'arrêt.
 
 ![Live Graphs](Docs/GraphV1.png)
 
@@ -272,6 +272,8 @@ TB/
 │                          - Order : symbol, side, price, amount, status, exchange_id
 │                          - Trade : order, price, amount, fee
 │                          - init_db() : crée les tables automatiquement
+│
+├── Docs/                Screenshots et images
 │
 └── utils/               UTILITAIRES
     ├── __init__.py
