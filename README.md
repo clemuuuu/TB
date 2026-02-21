@@ -52,6 +52,10 @@ python main.py --no-chart      # terminal seul, sans fenêtres
 - Le PNL total s'affiche en temps réel dans la fenêtre PNL (courbe + topbar).
 - `Ctrl+C` dans le terminal pour arrêter proprement.
 
+![Live Graphs](Docs/GraphV1.png)
+
+![Live PNL](Docs/PNL.png)
+
 ---
 
 ## Configuration (`config.yaml`)
@@ -98,6 +102,8 @@ Le modèle fitte la distribution des log-returns sur les fonctions propres de l'
 - $\Omega = 1$ ($n=0$) : distribution gaussienne → marché calme
 - $\Omega = 3$ ($n=1$) : distribution bimodale → 2 régimes de prix
 - $\Omega \ge 5$ ($n \ge 2$) : distribution multimodale → marché volatile
+
+![Volatile](Docs/severevola.png)
 
 3 modes d'affichage (activables indépendamment par paire) :
 
